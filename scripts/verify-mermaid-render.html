@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>vcp-mermaid-verify</title>
+<!-- 与插件 VCP_SHADOW_BASE 一致的资源依赖（client.js L833） -->
+<link rel="stylesheet" href="http://127.0.0.1:3558/vendor/katex-vd.css">
+</head>
+<body>
+<div id="vcp-root" style="background:#0d1117;color:#e6edf3;padding:16px">
+<pre><code class="language-mermaid">flowchart LR
+  A["hook"] --> B["WarProject"]
+  B --> C["ModuleRegistry"]
+  C --> D["三模块"]
+  D --> E["SavedData"]
+  E --> F["广播同步"]</code></pre>
+</div>
+<div id="probe">PENDING</div>
+<script>
+// 复刻 dsh-raw-html 的 hydrateVcpCard 中 mermaid 分支（lib/client.js L493-521）
+var LOG = [];
+function mark(s) { LOG.push(s); document.getElementById('probe').textContent = LOG.join(' | '); }
+mark('boot');
+
+function loadScriptOnce(id, src, onLoad) {
+  var s = document.createElement('script');
+  s.id = id; s.src = src; s.async = true;
+  s.onload = function () { if (onLoad) onLoad(); };
+  s.onerror = function () { mark('SCRIPT_ERROR ' + src); window.__RESULT = 'FAIL:script-load'; };
+  document.head.appendChild(s);
+}
+
+loadScriptOnce('dsh-raw-html-mermaid', 'http://127.0.0.1:3558/vendor/mermaid.min.js', function () {
+  mark('mermaid-script-loaded');
+  if (!window.mermaid || typeof window.mermaid.run !== 'function') {
+    mark('window.mermaid 缺失');
+    window.__RESULT = 'FAIL:no-window-mermaid';
+    return;
+  }
+  mark('window.mermaid OK');
+  var root = document.getElementById('vcp-root');
+  var codeNodes = root.querySelectorAll('pre > code.language-mermaid');
+  mark('codeNodes=' + codeNodes.length);
+  for (var i = 0; i < codeNodes.length; i++) {
+    var code = codeNodes[i];
+    var box = document.createElement('div');
+    box.className = 'mermaid';
+    box.textContent = code.textContent;
+    code.parentNode.replaceWith(box);
+  }
+  var diagrams = Array.prototype.slice.call(root.querySelectorAll('.mermaid:not([data-processed])'));
+  mark('diagrams=' + diagrams.length);
+  if (!diagrams.length) { window.__RESULT = 'FAIL:no-diagram-node'; return; }
+  window.mermaid.run({ nodes: diagrams }).then(function () {
+    var svg = root.querySelector('.mermaid svg');
+    if (svg) {
+      window.__RESULT = 'PASS svg=' + Math.round(svg.getBoundingClientRect().width) + 'x' + Math.round(svg.getBoundingClientRect().height);
+    } else {
+      window.__RESULT = 'FAIL:no-svg';
+    }
+    mark(window.__RESULT);
+  }).catch(function (e) {
+    window.__RESULT = 'FAIL:run-error:' + (e && e.message ? e.message : String(e));
+    mark(window.__RESULT);
+  });
+});
+</script>
+</body>
+</html>

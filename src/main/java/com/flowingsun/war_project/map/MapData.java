@@ -1,0 +1,364 @@
+package com.flowingsun.war_project.map;
+
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.saveddata.SavedData;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+public final class MapData extends SavedData {
+    private static final String NAME = "war_project_map";
+
+    private final Map<String, Node> nodes = new LinkedHashMap<>();
+    private final Map<String, Warzone> warzones = new LinkedHashMap<>();
+
+    public static MapData get(MinecraftServer server) {
+        return server.overworld().getDataStorage().computeIfAbsent(MapData::load, MapData::new, NAME);
+    }
+
+    public static MapData load(CompoundTag tag) {
+        MapData data = new MapData();
+        ListTag nodeTags = tag.getList("nodes", Tag.TAG_COMPOUND);
+        for (Tag raw : nodeTags) {
+            Node node = Node.load((CompoundTag) raw);
+            if (validId(node.id()) && !node.chunks().isEmpty()) {
+                data.nodes.put(node.id(), node);
+            }
+        }
+        ListTag warzoneTags = tag.getList("warzones", Tag.TAG_COMPOUND);
+        for (Tag raw : warzoneTags) {
+            Warzone warzone = Warzone.load((CompoundTag) raw);
+            if (validId(warzone.id()) && validId(warzone.nodeId()) && !warzone.chunks().isEmpty()) {
+                data.warzones.put(warzone.id(), warzone);
+            }
+        }
+        data.normalize();
+        return data;
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag) {
+        ListTag nodeTags = new ListTag();
+        nodes.values().forEach(node -> nodeTags.add(node.save()));
+        tag.put("nodes", nodeTags);
+        ListTag warzoneTags = new ListTag();
+        warzones.values().forEach(warzone -> warzoneTags.add(warzone.save()));
+        tag.put("warzones", warzoneTags);
+        return tag;
+    }
+
+    public Collection<Node> nodes() {
+        return List.copyOf(nodes.values());
+    }
+
+    public Collection<Warzone> warzones() {
+        return List.copyOf(warzones.values());
+    }
+
+    public Optional<Node> node(String nodeId) {
+        return Optional.ofNullable(nodes.get(nodeId));
+    }
+
+    public Optional<Warzone> warzone(String warzoneId) {
+        return Optional.ofNullable(warzones.get(warzoneId));
+    }
+
+    public Optional<Warzone> warzoneForNode(String nodeId) {
+        return warzones.values().stream().filter(warzone -> warzone.nodeId().equals(nodeId)).findFirst();
+    }
+
+    public Optional<Node> findNodeAt(int chunkX, int chunkZ) {
+        long key = ChunkPos.asLong(chunkX, chunkZ);
+        return nodes.values().stream().filter(node -> node.chunks().contains(key)).findFirst();
+    }
+
+    public Optional<Warzone> findWarzoneAt(int chunkX, int chunkZ) {
+        long key = ChunkPos.asLong(chunkX, chunkZ);
+        return warzones.values().stream().filter(warzone -> warzone.chunks().contains(key)).findFirst();
+    }
+
+    public SaveResult saveNodeWithWarzone(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb) {
+        String cleanNodeId = cleanId(nodeId);
+        if (!validId(cleanNodeId)) {
+            return SaveResult.invalid("Invalid node id.");
+        }
+        if (nodes.containsKey(cleanNodeId)) {
+            return SaveResult.invalid("Node already exists: " + cleanNodeId);
+        }
+        if (nodeChunks.isEmpty()) {
+            return SaveResult.invalid("Node requires at least one chunk.");
+        }
+        if (intersectsAnyNode(nodeChunks, "")) {
+            return SaveResult.invalid("Node chunks overlap another node.");
+        }
+        Set<Long> cleanWarzoneChunks = new LinkedHashSet<>(warzoneChunks);
+        cleanWarzoneChunks.addAll(nodeChunks);
+        if (!cleanWarzoneChunks.containsAll(nodeChunks)) {
+            return SaveResult.invalid("Warzone must contain all node chunks.");
+        }
+        Set<Long> extra = new LinkedHashSet<>(cleanWarzoneChunks);
+        extra.removeAll(nodeChunks);
+        if (extra.isEmpty()) {
+            return SaveResult.invalid("Warzone requires at least one non-node chunk.");
+        }
+        if (intersectsAnyNode(extra, cleanNodeId)) {
+            return SaveResult.invalid("Warzone extra chunks cannot overlap any node.");
+        }
+        if (intersectsAnyWarzone(cleanWarzoneChunks, "")) {
+            return SaveResult.invalid("Warzone chunks overlap another warzone.");
+        }
+
+        String name = nodeName == null || nodeName.isBlank() ? cleanNodeId : nodeName.trim();
+        Node node = new Node(cleanNodeId, name, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), Set.copyOf(nodeChunks));
+        Warzone warzone = new Warzone(cleanNodeId, cleanNodeId, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), Set.copyOf(cleanWarzoneChunks));
+        nodes.put(cleanNodeId, node);
+        warzones.put(warzone.id(), warzone);
+        setDirty();
+        return SaveResult.success();
+    }
+
+    public SaveResult renameNode(String oldNodeId, String newNodeId, String newName) {
+        Node existing = nodes.get(oldNodeId);
+        String cleanNewId = cleanId(newNodeId);
+        if (existing == null) {
+            return SaveResult.invalid("Node not found: " + oldNodeId);
+        }
+        if (!validId(cleanNewId)) {
+            return SaveResult.invalid("Invalid node id.");
+        }
+        if (!oldNodeId.equals(cleanNewId) && nodes.containsKey(cleanNewId)) {
+            return SaveResult.invalid("Node already exists: " + cleanNewId);
+        }
+        nodes.remove(oldNodeId);
+        Node renamed = existing.withIdentity(cleanNewId, newName == null || newName.isBlank() ? cleanNewId : newName.trim());
+        nodes.put(cleanNewId, renamed);
+        List<Warzone> updates = warzones.values().stream().filter(warzone -> warzone.nodeId().equals(oldNodeId)).toList();
+        for (Warzone warzone : updates) {
+            warzones.remove(warzone.id());
+            String warzoneId = warzone.id().equals(oldNodeId) ? cleanNewId : warzone.id();
+            warzones.put(warzoneId, warzone.withIdentity(warzoneId, cleanNewId));
+        }
+        setDirty();
+        return SaveResult.success();
+    }
+
+    public boolean deleteNode(String nodeId) {
+        Node removed = nodes.remove(nodeId);
+        if (removed == null) {
+            return false;
+        }
+        warzones.entrySet().removeIf(entry -> entry.getValue().nodeId().equals(nodeId));
+        setDirty();
+        return true;
+    }
+
+    public boolean deleteWarzone(String warzoneId) {
+        if (warzones.remove(warzoneId) != null) {
+            setDirty();
+            return true;
+        }
+        return false;
+    }
+
+    public boolean setNodeFaction(String nodeId, String factionId) {
+        Node node = nodes.get(nodeId);
+        if (node == null) {
+            return false;
+        }
+        String faction = normalizeFaction(factionId);
+        nodes.put(nodeId, node.withFaction(faction));
+        warzoneForNode(nodeId).ifPresent(warzone -> warzones.put(warzone.id(), warzone.withFaction(faction)));
+        setDirty();
+        return true;
+    }
+
+    public boolean setWarzoneFaction(String warzoneId, String factionId) {
+        Warzone warzone = warzones.get(warzoneId);
+        if (warzone == null) {
+            return false;
+        }
+        warzones.put(warzoneId, warzone.withFaction(normalizeFaction(factionId)));
+        setDirty();
+        return true;
+    }
+
+    public CompoundTag clientSnapshot() {
+        CompoundTag tag = new CompoundTag();
+        ListTag nodeTags = new ListTag();
+        nodes.values().forEach(node -> nodeTags.add(node.save()));
+        tag.put("nodes", nodeTags);
+        ListTag warzoneTags = new ListTag();
+        warzones.values().forEach(warzone -> warzoneTags.add(warzone.save()));
+        tag.put("warzones", warzoneTags);
+        return tag;
+    }
+
+    private void normalize() {
+        nodes.entrySet().removeIf(entry -> !validId(entry.getKey()) || entry.getValue().chunks().isEmpty());
+        warzones.entrySet().removeIf(entry -> !validId(entry.getKey())
+                || !nodes.containsKey(entry.getValue().nodeId())
+                || entry.getValue().chunks().isEmpty()
+                || !entry.getValue().chunks().containsAll(nodes.get(entry.getValue().nodeId()).chunks()));
+    }
+
+    private boolean intersectsAnyNode(Set<Long> chunks, String ignoredNodeId) {
+        for (Node node : nodes.values()) {
+            if (node.id().equals(ignoredNodeId)) {
+                continue;
+            }
+            if (intersects(chunks, node.chunks())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean intersectsAnyWarzone(Set<Long> chunks, String ignoredWarzoneId) {
+        for (Warzone warzone : warzones.values()) {
+            if (warzone.id().equals(ignoredWarzoneId)) {
+                continue;
+            }
+            if (intersects(chunks, warzone.chunks())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean intersects(Set<Long> left, Set<Long> right) {
+        for (Long value : left) {
+            if (right.contains(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static String normalizeFaction(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "neutral";
+        }
+        String value = raw.trim();
+        if ("none".equalsIgnoreCase(value)) {
+            return "none";
+        }
+        if ("neutral".equalsIgnoreCase(value)) {
+            return "neutral";
+        }
+        return value;
+    }
+
+    public static boolean isFaction(String raw) {
+        String value = normalizeFaction(raw);
+        return !"neutral".equalsIgnoreCase(value) && !"none".equalsIgnoreCase(value);
+    }
+
+    public static boolean validId(String id) {
+        return id != null && id.matches("[a-zA-Z0-9_\\-.:]{1,64}");
+    }
+
+    public static String cleanId(String id) {
+        return id == null ? "" : id.trim();
+    }
+
+    private static int normalizeRgb(int color) {
+        return color == 0 ? 0x2E7DFF : color & 0xFFFFFF;
+    }
+
+    private static Set<Long> readChunks(CompoundTag tag) {
+        Set<Long> chunks = new LinkedHashSet<>();
+        ListTag chunkTags = tag.getList("chunks", Tag.TAG_COMPOUND);
+        for (Tag raw : chunkTags) {
+            CompoundTag chunk = (CompoundTag) raw;
+            chunks.add(ChunkPos.asLong(chunk.getInt("x"), chunk.getInt("z")));
+        }
+        return chunks;
+    }
+
+    private static ListTag writeChunks(Collection<Long> chunks) {
+        ListTag tags = new ListTag();
+        for (Long key : chunks) {
+            ChunkPos pos = new ChunkPos(key);
+            CompoundTag chunk = new CompoundTag();
+            chunk.putInt("x", pos.x);
+            chunk.putInt("z", pos.z);
+            tags.add(chunk);
+        }
+        return tags;
+    }
+
+    public record Node(String id, String name, String factionId, int colorRgb, long updatedAt, Set<Long> chunks) {
+        static Node load(CompoundTag tag) {
+            String id = cleanId(tag.getString("id"));
+            String name = tag.getString("name").isBlank() ? id : tag.getString("name");
+            return new Node(id, name, normalizeFaction(tag.getString("faction_id")), tag.getInt("color_rgb"),
+                    tag.getLong("updated_at"), Set.copyOf(readChunks(tag)));
+        }
+
+        CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("id", id);
+            tag.putString("name", name);
+            tag.putString("faction_id", factionId);
+            tag.putInt("color_rgb", colorRgb);
+            tag.putLong("updated_at", updatedAt);
+            tag.put("chunks", writeChunks(chunks));
+            return tag;
+        }
+
+        Node withIdentity(String newId, String newName) {
+            return new Node(newId, newName, factionId, colorRgb, System.currentTimeMillis(), chunks);
+        }
+
+        Node withFaction(String faction) {
+            return new Node(id, name, faction, colorRgb, System.currentTimeMillis(), chunks);
+        }
+    }
+
+    public record Warzone(String id, String nodeId, String factionId, int colorRgb, long updatedAt, Set<Long> chunks) {
+        static Warzone load(CompoundTag tag) {
+            return new Warzone(cleanId(tag.getString("id")), cleanId(tag.getString("node_id")),
+                    normalizeFaction(tag.getString("faction_id")), tag.getInt("color_rgb"),
+                    tag.getLong("updated_at"), Set.copyOf(readChunks(tag)));
+        }
+
+        CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("id", id);
+            tag.putString("node_id", nodeId);
+            tag.putString("faction_id", factionId);
+            tag.putInt("color_rgb", colorRgb);
+            tag.putLong("updated_at", updatedAt);
+            tag.put("chunks", writeChunks(chunks));
+            return tag;
+        }
+
+        Warzone withIdentity(String newId, String newNodeId) {
+            return new Warzone(newId, newNodeId, factionId, colorRgb, System.currentTimeMillis(), chunks);
+        }
+
+        Warzone withFaction(String faction) {
+            return new Warzone(id, nodeId, faction, colorRgb, System.currentTimeMillis(), chunks);
+        }
+    }
+
+    public record SaveResult(boolean ok, String message) {
+        static SaveResult success() {
+            return new SaveResult(true, "");
+        }
+
+        static SaveResult invalid(String message) {
+            return new SaveResult(false, message);
+        }
+    }
+}

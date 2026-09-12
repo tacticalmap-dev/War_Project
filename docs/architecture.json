@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "War Project — 结构总览与主运行流程",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "ftb",
+      "type": "external",
+      "label": "FTB Chunks 地图",
+      "sublabel": "拖拽选区 → 建节点",
+      "pos": [
+        60,
+        480
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "entry",
+      "type": "backend",
+      "label": "WarProject",
+      "sublabel": "@Mod 入口",
+      "pos": [
+        420,
+        60
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "client",
+      "type": "frontend",
+      "label": "客户端占领探测",
+      "sublabel": "WargameCaptureClient",
+      "pos": [
+        60,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "net",
+      "type": "messagebus",
+      "label": "WarProjectNetwork",
+      "sublabel": "SimpleChannel · 5 类包",
+      "pos": [
+        420,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "ModuleRegistry",
+      "sublabel": "map / team / wargame",
+      "pos": [
+        780,
+        60
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "cfg",
+      "type": "backend",
+      "label": "Config",
+      "sublabel": "占领参数配置",
+      "pos": [
+        420,
+        480
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "wargame",
+      "type": "backend",
+      "label": "WargameService",
+      "sublabel": "占领计时 · 20 tick",
+      "pos": [
+        780,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "teamdata",
+      "type": "database",
+      "label": "TeamData",
+      "sublabel": "队伍与盟友存档",
+      "pos": [
+        780,
+        480
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "cmd",
+      "type": "backend",
+      "label": "WarProjectCommands",
+      "sublabel": "/warproject 指令",
+      "pos": [
+        1140,
+        60
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "mapdata",
+      "type": "database",
+      "label": "MapData",
+      "sublabel": "SavedData 地图存档",
+      "pos": [
+        1140,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "screen",
+      "type": "frontend",
+      "label": "客户端状态镜像",
+      "sublabel": "ClientMapState",
+      "pos": [
+        1500,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "xaero",
+      "type": "external",
+      "label": "Xaero 地图模组",
+      "sublabel": "Mixin 注入高亮器",
+      "pos": [
+        1500,
+        480
+      ],
+      "size": [
+        190,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "服务端领地状态",
+      "wraps": [
+        "wargame",
+        "mapdata",
+        "teamdata"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "intent",
+      "from": "client",
+      "to": "net",
+      "label": "CaptureIntentPacket",
+      "variant": "emphasis"
+    },
+    {
+      "id": "dispatch",
+      "from": "net",
+      "to": "wargame",
+      "label": "占领意图",
+      "variant": "emphasis"
+    },
+    {
+      "id": "apply",
+      "from": "wargame",
+      "to": "mapdata",
+      "label": "改写阵营",
+      "variant": "emphasis"
+    },
+    {
+      "id": "broadcast",
+      "from": "mapdata",
+      "to": "screen",
+      "label": "MapSyncPacket",
+      "variant": "emphasis"
+    },
+    {
+      "id": "render",
+      "from": "screen",
+      "to": "xaero",
+      "label": "渲染叠加层",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "id": "create-node",
+      "from": "ftb",
+      "to": "net",
+      "label": "CreateNodeWarzone",
+      "variant": "dashed"
+    },
+    {
+      "id": "config",
+      "from": "cfg",
+      "to": "wargame",
+      "label": "占领参数",
+      "variant": "dashed"
+    },
+    {
+      "id": "admin-map",
+      "from": "cmd",
+      "to": "mapdata",
+      "label": "setfaction / delete",
+      "labelDy": 24
+    },
+    {
+      "id": "build-modules",
+      "from": "entry",
+      "to": "registry",
+      "label": "构造三大模块"
+    },
+    {
+      "id": "register-channel",
+      "from": "entry",
+      "to": "net",
+      "label": "注册 5 个数据包",
+      "labelDy": 24
+    },
+    {
+      "id": "register-service",
+      "from": "registry",
+      "to": "wargame",
+      "label": "注册 Tick 监听",
+      "labelDy": 24
+    },
+    {
+      "id": "read-teams",
+      "from": "wargame",
+      "to": "teamdata",
+      "label": "读队伍 / 盟友",
+      "labelDy": 24
+    },
+    {
+      "id": "register-commands",
+      "from": "registry",
+      "to": "cmd",
+      "label": "TeamModule 注册指令"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "技术栈",
+      "items": [
+        "Java 17 · Forge 47.4.10 · Minecraft 1.20.1",
+        "ForgeGradle 6 / Gradle 8.8，official 映射",
+        "Mixin 挂接第三方地图，SavedData 负责存档"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "关键入口",
+      "items": [
+        "WarProject(@Mod) 构造三模块并注册事件",
+        "WarProjectNetwork.register() 注册 5 类数据包",
+        "WarProjectCommands 注册 /warproject 指令树"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "可选兼容层",
+      "items": [
+        "src/optionalXaero、src/optionalFtb 按 jar 是否找到决定是否编译",
+        "缺依赖时 Mixin 不应用（required=false），本体照常运行"
+      ]
+    }
+  ]
+}

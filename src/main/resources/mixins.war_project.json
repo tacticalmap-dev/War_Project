@@ -1,0 +1,15 @@
+{
+  "required": false,
+  "package": "com.flowingsun.war_project.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "com.flowingsun.war_project.mixin.WarProjectMixinPlugin",
+  "mixins": [],
+  "client": [
+    "xaero.XaeroWorldMapSessionMixin",
+    "xaero.XaeroMinimapSessionMixin",
+    "xaero.XaeroCommonMinimapRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
