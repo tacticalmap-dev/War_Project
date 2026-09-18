@@ -26,5 +26,7 @@ public final class TeamApi {
 
     public static void broadcast(MinecraftServer server) {
         com.flowingsun.war_project.net.WarProjectNetwork.broadcastTeams(server);
+        // Single choke point for team changes: keeps e33chat's group tabs equal to TeamData.
+        TeamE33ChatBridge.syncAll(server);
     }
 }

@@ -1,5 +1,6 @@
 package com.flowingsun.war_project.client;
 
+import com.flowingsun.war_project.WarProject;
 import com.flowingsun.war_project.net.WarProjectNetwork;
 import com.flowingsun.war_project.team.TeamClientState;
 import net.minecraft.client.Minecraft;
@@ -13,11 +14,11 @@ import net.minecraftforge.fml.common.Mod;
 
 import java.util.Optional;
 
-@Mod.EventBusSubscriber(value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = WarProject.MODID, value = Dist.CLIENT)
 public final class WargameCaptureClient {
+    private static final int INTENT_INTERVAL_TICKS = 20;
+
     private static int tickCounter;
-    private static String lastNodeId = "";
-    private static double lastProgress;
 
     private WargameCaptureClient() {
     }
@@ -32,21 +33,28 @@ public final class WargameCaptureClient {
         if (player == null || minecraft.level == null) {
             return;
         }
-        if (++tickCounter < 20) {
+
+        WargameCaptureHudState.tick();
+        WargameCaptureNoticeHudState.tick();
+
+        ChunkPos chunk = player.chunkPosition();
+        Optional<ClientMapState.ClientNode> node = ClientMapState.nodeAt(chunk.x, chunk.z);
+        WargameCaptureHudState.setCurrentNode(node.map(ClientMapState.ClientNode::id));
+
+        if (node.isEmpty()) {
+            tickCounter = 0;
+            return;
+        }
+        if (++tickCounter < INTENT_INTERVAL_TICKS) {
             return;
         }
         tickCounter = 0;
-        ChunkPos chunk = player.chunkPosition();
-        Optional<ClientMapState.ClientNode> node = ClientMapState.nodeAt(chunk.x, chunk.z);
-        if (node.isEmpty()) {
-            return;
-        }
+
         Optional<String> team = TeamClientState.teamOf(player.getScoreboardName());
         if (team.isEmpty()) {
             return;
         }
-        String owner = node.get().factionId();
-        if (team.get().equals(owner) || TeamClientState.alliesOf(team.get()).contains(owner)) {
+        if (isFriendlyNode(node.get().factionId(), team.get())) {
             return;
         }
         WarProjectNetwork.sendCaptureIntent(node.get().id());
@@ -54,20 +62,15 @@ public final class WargameCaptureClient {
 
     @SubscribeEvent
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        lastNodeId = "";
-        lastProgress = 0.0D;
+        tickCounter = 0;
+        WargameCaptureHudState.reset();
+        WargameCaptureNoticeHudState.reset();
     }
 
-    public static void updateProgress(String nodeId, double progress) {
-        lastNodeId = nodeId;
-        lastProgress = progress;
-    }
-
-    public static String lastNodeId() {
-        return lastNodeId;
-    }
-
-    public static double lastProgress() {
-        return lastProgress;
+    private static boolean isFriendlyNode(String factionId, String teamId) {
+        if (factionId == null || factionId.isBlank()) {
+            return false;
+        }
+        return factionId.equals(teamId) || TeamClientState.areAllied(factionId, teamId);
     }
 }

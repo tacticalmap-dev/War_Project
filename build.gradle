@@ -121,13 +121,23 @@ def findOptionalJar = { List<String> tokens ->
             include '**/*.jar.disabled'
         }.files.each { candidate ->
             def name = candidate.name.toLowerCase(Locale.ROOT)
+            // "neoforge" contains "forge", and fabric/quilt builds target other loaders: never use them.
+            if (name.contains('neoforge') || name.contains('fabric') || name.contains('quilt')) {
+                return
+            }
             if (tokens.every { token -> name.contains(token.toLowerCase(Locale.ROOT)) }) {
                 candidates.add(candidate)
             }
         }
     }
     candidates.sort { a, b ->
-        (a.name.endsWith('.jar.disabled') <=> b.name.endsWith('.jar.disabled')) ?: (b.lastModified() <=> a.lastModified())
+        def aName = a.name.toLowerCase(Locale.ROOT)
+        def bName = b.name.toLowerCase(Locale.ROOT)
+        def aMc = aName.contains('1.20.1') ? 0 : 1
+        def bMc = bName.contains('1.20.1') ? 0 : 1
+        return (aMc <=> bMc)
+                ?: (a.name.endsWith('.jar.disabled') <=> b.name.endsWith('.jar.disabled'))
+                ?: (b.lastModified() <=> a.lastModified())
     }
     return candidates.isEmpty() ? null : candidates.first()
 }
@@ -146,11 +156,11 @@ def hasOptionalXaeroCompat = !disableOptionalCompat && optionalXaeroWorldMapJar 
 
 if (hasOptionalFtbCompat) {
     sourceSets.main.java.srcDir 'src/optionalFtb/java'
-    println "War Project optional FTB compat enabled"
+    println "War Project optional FTB compat enabled: ${optionalFtbLibraryJar.name} + ${optionalFtbChunksJar.name}"
 }
 if (hasOptionalXaeroCompat) {
     sourceSets.main.java.srcDir 'src/optionalXaero/java'
-    println "War Project optional Xaero compat enabled"
+    println "War Project optional Xaero compat enabled: ${optionalXaeroWorldMapJar.name} + ${optionalXaeroMinimapJar.name}"
 }
 
 repositories {

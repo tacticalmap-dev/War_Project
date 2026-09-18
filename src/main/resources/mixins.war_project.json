@@ -7,7 +7,9 @@
   "client": [
     "xaero.XaeroWorldMapSessionMixin",
     "xaero.XaeroMinimapSessionMixin",
-    "xaero.XaeroCommonMinimapRendererMixin"
+    "xaero.XaeroMinimapScreenOverlayMixin",
+    "xaero.XaeroMinimapFramebufferOverlayMixin",
+    "xaero.XaeroWorldMapZoomLimitsMixin"
   ],
   "injectors": {
     "defaultRequire": 0

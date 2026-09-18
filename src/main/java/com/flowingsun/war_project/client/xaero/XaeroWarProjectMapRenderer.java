@@ -41,6 +41,30 @@ public final class XaeroWarProjectMapRenderer {
         return pixels;
     }
 
+    /**
+     * World-space centre of a set of chunks, used to place a node label on the map.
+     */
+    public static double[] geometricCenter(Iterable<Long> chunks) {
+        double sumX = 0.0D;
+        double sumZ = 0.0D;
+        int count = 0;
+        for (Long key : chunks) {
+            ChunkPos pos = new ChunkPos(key);
+            sumX += (pos.x + 0.5D) * 16.0D;
+            sumZ += (pos.z + 0.5D) * 16.0D;
+            count++;
+        }
+        return count == 0 ? null : new double[]{sumX / count, sumZ / count};
+    }
+
+    public static String label(String name, String id, int maxLength) {
+        String text = name == null || name.isBlank() ? id : name;
+        if (text == null) {
+            return "";
+        }
+        return text.length() > maxLength ? text.substring(0, maxLength) : text;
+    }
+
     public static boolean chunkHasOverlay(int chunkX, int chunkZ) {
         return ClientMapState.nodeAt(chunkX, chunkZ).isPresent() || warzoneAt(chunkX, chunkZ).isPresent();
     }
@@ -103,7 +127,7 @@ public final class XaeroWarProjectMapRenderer {
 
     private static void drawNodeEdges(int[] pixels, int chunkX, int chunkZ, ClientMapState.ClientNode node) {
         int color = relationEdgeXaero(node.factionId());
-        drawChunkEdges(pixels, chunkX, chunkZ, color, true,
+        drawChunkEdges(pixels, chunkX, chunkZ, color, false,
                 !sameNode(chunkX - 1, chunkZ, node.id()),
                 !sameNode(chunkX + 1, chunkZ, node.id()),
                 !sameNode(chunkX, chunkZ - 1, node.id()),
@@ -112,7 +136,7 @@ public final class XaeroWarProjectMapRenderer {
 
     private static void drawWarzoneEdges(int[] pixels, int chunkX, int chunkZ, ClientMapState.ClientWarzone warzone) {
         int color = relationEdgeXaero(warzone.factionId());
-        drawChunkEdges(pixels, chunkX, chunkZ, color, false,
+        drawChunkEdges(pixels, chunkX, chunkZ, color, true,
                 shouldDrawWarzoneEdge(warzone, chunkX - 1, chunkZ),
                 shouldDrawWarzoneEdge(warzone, chunkX + 1, chunkZ),
                 shouldDrawWarzoneEdge(warzone, chunkX, chunkZ - 1),
@@ -172,10 +196,22 @@ public final class XaeroWarProjectMapRenderer {
         }
     }
 
-    private static DashPattern dashPattern(int chunkPixels) {
-        int dash = clamp((int) Math.round(chunkPixels * 0.25D), 3, 18);
-        int gap = clamp((int) Math.round(chunkPixels * 0.15D), 2, 12);
+    /**
+     * Dash geometry scales with the on-screen size of one chunk, so the dash length follows map zoom.
+     * The upper bounds are generous so that dashing keeps growing instead of hitting a fixed cap.
+     */
+    public static DashPattern dashPattern(int chunkPixels) {
+        int dash = clamp((int) Math.round(chunkPixels * 0.30D), 3, 96);
+        int gap = clamp((int) Math.round(chunkPixels * 0.20D), 2, 64);
         return new DashPattern(dash, gap);
+    }
+
+    /**
+     * Line thickness in screen pixels. One pixel is the floor a filled rectangle can draw, and anything
+     * thicker reads as too heavy against the map, so edges stay hairline at every zoom level.
+     */
+    public static int edgeThickness(int chunkPixels) {
+        return 1;
     }
 
     private static int clamp(int value, int min, int max) {
@@ -261,9 +297,16 @@ public final class XaeroWarProjectMapRenderer {
                 && !"none".equalsIgnoreCase(factionId);
     }
 
-    private record DashPattern(int dash, int gap) {
-        boolean on(int coordinate) {
+    public record DashPattern(int dash, int gap) {
+        public boolean on(int coordinate) {
             return Math.floorMod(coordinate, dash + gap) < dash;
+        }
+
+        /**
+         * Shortest run worth dashing: one full period. Shorter runs fall back to a solid line.
+         */
+        public int minimumDashedLength() {
+            return dash + gap;
         }
     }
 }

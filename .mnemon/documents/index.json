@@ -1,4 +1,247 @@
 {
   "version": 1,
-  "documents": []
+  "documents": [
+    {
+      "id": "3d31dded-b45f-4f11-a183-0d1aa78e4faa",
+      "title": "War Project (war_project) 架构、占点系统与可选依赖集成说明",
+      "description": "War Project 模组的模块化结构、node/warzone 数据模型、服务端命令树、网络同步、占领逻辑、Xaero/FTB 可选集成与构建注意事项。修改本模组前先读此文档。",
+      "status": "active",
+      "filename": "war-project-war-project-3d31dded.md",
+      "relativePath": "documents/active/war-project-war-project-3d31dded.md",
+      "sourcePaths": [
+        "build.gradle",
+        "src/main/java/com/flowingsun/war_project/WarProject.java",
+        "src/main/java/com/flowingsun/war_project/module/ModuleRegistry.java",
+        "src/main/java/com/flowingsun/war_project/map/MapData.java",
+        "src/main/java/com/flowingsun/war_project/team/TeamData.java",
+        "src/main/java/com/flowingsun/war_project/wargame/WargameService.java",
+        "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
+        "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java",
+        "src/main/resources/mixins.war_project.json",
+        "src/main/resources/META-INF/mods.toml"
+      ],
+      "sessionIds": [
+        "ad314282-4cef-4ea8-b96a-432f0104bd14"
+      ],
+      "createdAt": "2026-09-12T07:03:48.002Z",
+      "updatedAt": "2026-09-12T07:03:48.002Z",
+      "lastAccessedAt": "2026-09-18T20:24:05.824Z",
+      "revision": 1,
+      "contentHash": "a665cea8fcd98491345f0b9520449cf956d038322f70afb8e2cced563a191cc7",
+      "sizeBytes": 11473,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "d33309cb-4d09-4115-b151-97634cb3315e",
+      "title": "Xaero 地图渲染规则与缩放下限实现（War Project，含 Xaero 字节码核对证据）",
+      "description": "War Project 中 Xaero 世界地图/小地图的边界样式规则（node 实线、战区虚线、虚线长度与线宽随缩放）、两个屏幕叠加层的分工与 EdgeCollector 带式绘制、以及世界地图最小缩放 0.5x 的注入依据（含对 Xaero 1.44.2 applyZoomLimits/destScale 的字节码核对）。改动地图渲染或缩放前先读此文档。关联文档 3d31dded-b45f-4f11-a183-0d1aa78e4faa。",
+      "status": "active",
+      "filename": "xaero-war-project-xaero-d33309cb.md",
+      "relativePath": "documents/active/xaero-war-project-xaero-d33309cb.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapScreenOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroWorldMapZoomLimitsMixin.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/resources/mixins.war_project.json",
+        "build.gradle"
+      ],
+      "sessionIds": [
+        "5cb30376-0b59-4307-92d2-76cfd090879d"
+      ],
+      "createdAt": "2026-09-12T11:54:24.005Z",
+      "updatedAt": "2026-09-12T11:54:24.005Z",
+      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "revision": 1,
+      "contentHash": "5bb9b601c598c4d9f7ea5984815a32ec4711f201afdf9f677bda2d95c363883c",
+      "sizeBytes": 9176,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "dbb656b9-3bb8-4211-ad68-f2bba70b49b2",
+      "title": "Xaero 集成规则勘误与增量：世界地图最小缩放 1x、小地图「不预判断 + 可见区精确裁形」",
+      "description": "War Project 中 Xaero 集成的规则变更与调研证据：世界地图最小缩放由 0.5x 改为 1x（GuiMap.applyZoomLimits TAIL 注入 destScale）；小地图叠加层不再用 translatePosition 的返回值判断是否渲染，改为等价投影公式 + 按可见区（矩形 ±specW/±specH、圆形半径 specW）精确裁形；含 Xaero 1.44.2/26.4.2 字节码依据。本文取代关联文档 d33309cb 中「最小缩放 0.5x」一节与「小地图借用 translatePosition 平移」的描述，改动 Xaero 渲染前请两文一并阅读。",
+      "status": "active",
+      "filename": "xaero-1x-dbb656b9.md",
+      "relativePath": "documents/active/xaero-1x-dbb656b9.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroWorldMapZoomLimitsMixin.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapScreenOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/resources/mixins.war_project.json"
+      ],
+      "sessionIds": [
+        "aa3383ad-59cc-4faa-a3da-c923f4a09867"
+      ],
+      "createdAt": "2026-09-18T17:35:49.645Z",
+      "updatedAt": "2026-09-18T17:35:49.645Z",
+      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "revision": 1,
+      "contentHash": "be8538bfcd5b0948113156975b574ad9fa808ed4bca6f47a8cc8a22440a8a700",
+      "sizeBytes": 9597,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "f74894bf-1239-48d1-a91e-df4159d9dbf3",
+      "title": "war_project × e33chat 群组适配（TeamE33ChatBridge）：契约、决策与验证证据",
+      "description": "war_project 队伍/同盟与更新后 e33chat（2.4.13 fusion：E33ChatGroupApi 接到内建 GroupManager）的适配层设计与用户决策：反射桥接、群组 id/命名规则、同盟簇合并、三处同步触发点、聊天路径移交与回退、e33chat 侧必须遵守的契约（名字净化、声明式替换、按名字成员、离线登录补员、groups_enabled 闸门、群组上限）、验证证据与已知取舍。改动 team 聊天或 e33chat 集成前先读。关联文档 3d31dded-b45f-4f11-a183-0d1aa78e4faa。",
+      "status": "active",
+      "filename": "war-project-e33chat-teame33chatbridge-f74894bf.md",
+      "relativePath": "documents/active/war-project-e33chat-teame33chatbridge-f74894bf.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/team/TeamE33ChatBridge.java",
+        "src/main/java/com/flowingsun/war_project/team/TeamApi.java",
+        "src/main/java/com/flowingsun/war_project/team/TeamModule.java",
+        "src/main/java/com/flowingsun/war_project/team/TeamChatService.java",
+        "src/main/java/com/flowingsun/war_project/team/TeamData.java",
+        "src/main/resources/META-INF/mods.toml",
+        "docs/ARCHITECTURE.md"
+      ],
+      "sessionIds": [
+        "7afc4906-b754-4edf-b31f-4f0bc3dd9922"
+      ],
+      "createdAt": "2026-09-18T18:29:31.326Z",
+      "updatedAt": "2026-09-18T18:29:31.326Z",
+      "lastAccessedAt": "2026-09-18T20:01:01.161Z",
+      "revision": 1,
+      "contentHash": "1303c7a908fd0d9cddeefaab526a26eb1c68f9c9b931ad189dcabd7167c382b8",
+      "sizeBytes": 11428,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "5ea0e65d-6677-419e-9263-916413603f03",
+      "title": "Xaero 小地图叠加层改为 FBO 内绘制（取代既有「可见区精确裁形」方案）",
+      "description": "War Project 中小地图叠加层的现行实现：注入 MinimapFBORenderer.renderChunksToFBO 内对 MinimapElementMapRendererHandler.render 的调用点，把叠加层画进地图纹理，由 Xaero 自身的方形/圆形遮罩裁形，不再自建裁剪。本文取代关联文档 dbb656b9 的「可见区精确裁形」一节与 d33309cb 中关于小地图叠加层的描述（那两个文件已被删除）；含 Xaero Minimap 26.4.2 字节码依据与已知限制。改小地图渲染前先读此文档。",
+      "status": "active",
+      "filename": "xaero-fbo-5ea0e65d.md",
+      "relativePath": "documents/active/xaero-fbo-5ea0e65d.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapFboOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapFboOverlayMixin.java",
+        "src/main/resources/mixins.war_project.json",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroWorldMapZoomLimitsMixin.java"
+      ],
+      "sessionIds": [
+        "f24ce406-9df2-4796-9ec3-f4438372176c"
+      ],
+      "createdAt": "2026-09-18T20:01:24.183Z",
+      "updatedAt": "2026-09-18T20:01:24.183Z",
+      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "revision": 1,
+      "contentHash": "32d2b857f93b891067a2a4f72a8b173d7fbe050aba753fe39fef5466ebc94f60",
+      "sizeBytes": 8749,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "1223eb8a-dd85-486c-acd6-b327dec5584d",
+      "title": "War Project 增量交接：小地图 FBO 未渲染排查、Node 名称渲染、FTB 编辑器交互",
+      "description": "War Project 中三类新知识的交接：小地图叠加层完全不渲染的排查（已排除描述符与缓冲时机、主因是 usingFBO() 为假/安全模式，含一次性诊断日志与 graphics.flush() 加固）、node 名称在几何中心的渲染分工（世界地图屏幕层、小地图也走屏幕层以保持正向）、以及 FTB 大地图编辑器的交互语义与 EditMapObjectPacket 服务端入口。改 Xaero 小地图渲染或 FTB 编辑器前读此文档，机制细节见关联文档。",
+      "status": "active",
+      "filename": "war-project-fbo-node-ftb-1223eb8a.md",
+      "relativePath": "documents/active/war-project-fbo-node-ftb-1223eb8a.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapFboOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapLabelOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapFboOverlayMixin.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapScreenOverlayMixin.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
+        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java",
+        "src/main/resources/mixins.war_project.json"
+      ],
+      "sessionIds": [
+        "f6011282-c5cf-4a79-950a-a108d0ac6682"
+      ],
+      "createdAt": "2026-09-18T20:24:39.927Z",
+      "updatedAt": "2026-09-18T20:24:39.927Z",
+      "lastAccessedAt": "2026-09-18T20:43:50.637Z",
+      "revision": 1,
+      "contentHash": "dcb2c07cc33bc9d8634a22455684b45ac5b927f11bf290e86a92fb4ab1292294",
+      "sizeBytes": 10474,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "b8b4935c-5926-449f-a42c-ad50c22883f9",
+      "title": "War Project 增量交接：小地图叠加层改走屏幕层（FBO 路径废弃）、线宽收细、FTB 仅编辑模式拦截",
+      "description": "War Project 小地图渲染主线的最终裁定：FBO 注入路径因两次实机不可见而废弃，叠加层（几何+名称）改由屏幕层 XaeroMinimapOverlay 实现并按可见区精确裁形；同时记录线宽公式收细（chunkPixels/28，1–3px）、FTB 编辑器仅在 node 模式拦截鼠标的规则、以及已删除文件清单。本文修正/取代 1223eb8a 的 FBO 现行机制描述与其中列出的已删文件，并订正 dbb656b9、d33309cb 中 XaeroMinimapScreenOverlay 的类名。改小地图渲染或 FTB 编辑交互前先读本文。",
+      "status": "active",
+      "filename": "war-project-fbo-ftb-b8b4935c.md",
+      "relativePath": "documents/active/war-project-fbo-ftb-b8b4935c.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapScreenOverlayMixin.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/resources/mixins.war_project.json",
+        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java"
+      ],
+      "sessionIds": [
+        "2aa26abe-2d39-4a13-abed-be13a454004d"
+      ],
+      "createdAt": "2026-09-18T20:32:33.083Z",
+      "updatedAt": "2026-09-18T20:32:33.083Z",
+      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "revision": 1,
+      "contentHash": "e38f9422e91955aef838ef217555e57440355cc7ae7724cd65e68117d779179c",
+      "sizeBytes": 7969,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "da05742d-18c8-4b29-b1c3-8852d2c2d8d3",
+      "title": "War Project 小地图叠加层：注入根因定位与修正（订正 b8b4935c 的注入机制与线宽）",
+      "description": "小地图叠加层长期不渲染的决定性根因：render 声明在抽象基类 MinimapElementRendererHandler 而非子类 MinimapElementOverMapRendererHandler，按子类+方法名匹配找不到方法，require=0 静默失败。含修正后的注入方式（基类 + 仅方法名 + instanceof 过滤 + Object 中转）、一次性诊断日志、线宽第二次收细（/40 夹取 1–2）、已排除项与部署核对。改小地图渲染或排查注入失效前先读本文。",
+      "status": "active",
+      "filename": "war-project-b8b4935c-da05742d.md",
+      "relativePath": "documents/active/war-project-b8b4935c-da05742d.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapScreenOverlayMixin.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/resources/mixins.war_project.json"
+      ],
+      "sessionIds": [
+        "92e9eb4d-22d0-4feb-b5ea-16a7fe32b92a"
+      ],
+      "createdAt": "2026-09-18T20:44:18.357Z",
+      "updatedAt": "2026-09-18T20:44:18.357Z",
+      "lastAccessedAt": "2026-09-18T20:44:18.357Z",
+      "revision": 1,
+      "contentHash": "5c85c611eda9b8c0bc347601d5cd1b2bc690f1ac7819dd5e9bc20438d36cedaf",
+      "sizeBytes": 9417,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "8eb90438-7478-4cfa-90a0-112cdbe5168f",
+      "title": "Xaero 小地图叠加层注入根因与 FBO 路径实现（War Project）",
+      "description": "War Project 中 Xaero 小地图叠加层的注入根因定位与最终实现：`render` 声明在抽象基类（按子类匹配必失败）、`renderMinimap` 长描述符易抄错，两个陷阱都会因 require=0 静默失效；最终采用「几何进 FBO（注入 MinimapElementMapRendererHandler.beforeRender 的 RETURN）+ 屏幕层画名称与兜底」双路门控；含 FBO 绑定/提交/解绑偏移、基类 render 的 pose.translate(0,0,depth) 不恢复 + FBO 内深度测试开启的陷阱、线宽恒定 1px 的像素下限结论，以及用日志二分诊断的清单。更正 b8b4935c「FBO 路径废弃」的结论。改 Xaero 小地图渲染前先读本文。",
+      "status": "active",
+      "filename": "xaero-fbo-war-project-8eb90438.md",
+      "relativePath": "documents/active/xaero-fbo-war-project-8eb90438.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapFramebufferOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapFramebufferOverlayMixin.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/mixin/xaero/XaeroMinimapScreenOverlayMixin.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
+        "src/main/resources/mixins.war_project.json"
+      ],
+      "sessionIds": [
+        "363387f6-e073-4f0d-84d6-99d8696644aa"
+      ],
+      "createdAt": "2026-09-18T20:53:46.236Z",
+      "updatedAt": "2026-09-18T20:53:46.236Z",
+      "lastAccessedAt": "2026-09-18T20:53:46.236Z",
+      "revision": 1,
+      "contentHash": "433ffd42145ca7042ecf2b5f14c5630aaa109e98c0e64891d7cf81cfd8319cbb",
+      "sizeBytes": 10357,
+      "memoryBodyIds": []
+    }
+  ]
 }

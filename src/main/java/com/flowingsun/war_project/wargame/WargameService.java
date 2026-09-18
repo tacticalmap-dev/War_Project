@@ -12,15 +12,21 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public final class WargameService {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final int INTENT_TTL_TICKS = 60;
+    private static final int CAPTURE_NOTICE_CAPTURED_COLOR = 0xFF4FA3FF;
+    private static final int CAPTURE_NOTICE_LOST_COLOR = 0xFFFF4D4D;
     private static WargameService active;
 
     private final Map<UUID, CaptureIntent> intents = new HashMap<>();
@@ -39,12 +45,11 @@ public final class WargameService {
 
     public void submitCaptureIntent(ServerPlayer player, String nodeId) {
         MinecraftServer server = player.getServer();
-        if (server == null) {
+        if (server == null || nodeId == null || nodeId.isBlank()) {
             return;
         }
         MapData.get(server).node(nodeId).ifPresent(node -> {
-            long currentChunk = player.chunkPosition().toLong();
-            if (node.chunks().contains(currentChunk)) {
+            if (node.chunks().contains(player.chunkPosition().toLong())) {
                 intents.put(player.getUUID(), new CaptureIntent(nodeId, server.getTickCount()));
             }
         });
@@ -66,69 +71,146 @@ public final class WargameService {
         int now = server.getTickCount();
         intents.entrySet().removeIf(entry -> now - entry.getValue().tick() > INTENT_TTL_TICKS);
 
-        Map<String, Map<String, Integer>> countsByNode = new LinkedHashMap<>();
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            CaptureIntent intent = intents.get(player.getUUID());
-            if (intent == null) {
+        Map<String, List<ServerPlayer>> playersByNode = playersByNode(server);
+        Map<String, List<ServerPlayer>> requestedByNode = requestedPlayersByNode(server, now);
+
+        Set<String> candidateNodeIds = new LinkedHashSet<>(requestedByNode.keySet());
+        candidateNodeIds.addAll(NodeOccupationService.getTrackedNodeIds());
+
+        for (String nodeId : candidateNodeIds) {
+            Optional<MapData.Node> node = MapData.get(server).node(nodeId);
+            if (node.isEmpty()) {
+                NodeOccupationService.clear(nodeId);
                 continue;
             }
-            Optional<MapData.Node> node = MapData.get(server).node(intent.nodeId());
-            if (node.isEmpty() || !node.get().chunks().contains(player.chunkPosition().toLong())) {
-                continue;
-            }
-            Optional<String> teamId = TeamApi.getPlayerTeamId(player);
-            if (teamId.isEmpty()) {
-                continue;
-            }
-            countsByNode.computeIfAbsent(intent.nodeId(), ignored -> new LinkedHashMap<>())
-                    .merge(teamId.get(), 1, Integer::sum);
+            tickNode(server, node.get(), countFactions(requestedByNode.getOrDefault(nodeId, List.of())), playersByNode);
         }
 
-        for (MapData.Node node : MapData.get(server).nodes()) {
-            tickNode(server, node, countsByNode.getOrDefault(node.id(), Map.of()));
-        }
+        sendProgressUpdates(server, playersByNode);
     }
 
-    private void tickNode(MinecraftServer server, MapData.Node node, Map<String, Integer> counts) {
+    private void tickNode(MinecraftServer server, MapData.Node node, Map<String, Integer> counts, Map<String, List<ServerPlayer>> playersByNode) {
+        String nodeId = node.id();
+        Optional<NodeOccupationService.Progress> tracked = NodeOccupationService.progress(nodeId);
         Optional<Leader> leader = uniqueLeader(counts);
-        Optional<NodeOccupationService.Progress> current = NodeOccupationService.progress(node.id());
-        if (leader.isEmpty() || TeamApi.areAllied(server, node.factionId(), leader.get().teamId())) {
-            recover(node.id(), current);
+        String owner = MapData.normalizeFaction(node.factionId());
+
+        if (leader.isEmpty() || TeamApi.areAllied(server, owner, leader.get().teamId())) {
+            recover(nodeId, tracked);
             return;
         }
 
         String attacker = leader.get().teamId();
-        double currentSeconds = current
-                .filter(progress -> progress.attackerFactionId().equals(attacker))
-                .map(NodeOccupationService.Progress::progressSeconds)
-                .orElse(0.0D);
+        boolean sameAttacker = tracked.map(progress -> progress.attackerFactionId().equals(attacker)).orElse(false);
+        String previousFaction = sameAttacker
+                ? tracked.get().previousFactionId()
+                : (MapData.isFaction(owner) ? owner : "neutral");
+        boolean neutralized = sameAttacker && tracked.get().neutralized();
+        double currentSeconds = sameAttacker ? tracked.get().progressSeconds() : 0.0D;
+
+        double required = NodeOccupationService.getRequiredProgress();
         double rate = rateForPlayers(leader.get().count());
-        double next = Math.min(Config.nodeCaptureBaseSeconds, currentSeconds + rate);
-        NodeOccupationService.setProgress(node.id(), attacker, next);
-        WarProjectNetwork.broadcastCaptureProgress(server, node.id(), attacker, next, Config.nodeCaptureBaseSeconds);
+        double next = Math.min(required, currentSeconds + rate);
+
+        if (!neutralized && MapData.isFaction(owner) && next >= required / 2.0D) {
+            MapDivideStateApi.applyNodeCapture(server, nodeId, "neutral");
+            neutralized = true;
+        }
+        NodeOccupationService.setProgress(nodeId, attacker, previousFaction, neutralized, next);
 
         if (Config.captureDebugMode) {
-            LOGGER.info("Node {} capture progress {} / {} by {}", node.id(), next, Config.nodeCaptureBaseSeconds, attacker);
+            LOGGER.info("Node {} capture progress {} / {} by {}", nodeId, next, required, attacker);
         }
-        if (shouldNeutralize(node, next)) {
-            MapDivideStateApi.applyNodeCapture(server, node.id(), "neutral");
-        }
-        if (next >= Config.nodeCaptureBaseSeconds) {
-            MapDivideStateApi.applyNodeCapture(server, node.id(), attacker);
-            NodeOccupationService.clear(node.id());
-            WarProjectNetwork.broadcastCaptureProgress(server, node.id(), attacker, 0.0D, Config.nodeCaptureBaseSeconds);
+
+        if (next >= required) {
+            MapDivideStateApi.applyNodeCapture(server, nodeId, attacker);
+            List<ServerPlayer> players = playersByNode.getOrDefault(nodeId, List.of());
+            sendNodeDisplay(players, nodeId, attacker, required);
+            sendCaptureNotice(server, node, players, attacker, previousFaction);
+            NodeOccupationService.clear(nodeId);
+            intents.entrySet().removeIf(entry -> entry.getValue().nodeId().equals(nodeId));
         }
     }
 
-    private void recover(String nodeId, Optional<NodeOccupationService.Progress> current) {
-        current.ifPresent(progress -> {
+    private void recover(String nodeId, Optional<NodeOccupationService.Progress> tracked) {
+        tracked.ifPresent(progress -> {
             double next = progress.progressSeconds() - Config.nodeCaptureRecoveryPerSecond;
             if (next <= 0.0D) {
                 NodeOccupationService.clear(nodeId);
             } else {
-                NodeOccupationService.setProgress(nodeId, progress.attackerFactionId(), next);
+                NodeOccupationService.setProgress(nodeId, progress.attackerFactionId(), progress.previousFactionId(), progress.neutralized(), next);
             }
         });
+    }
+
+    private void sendProgressUpdates(MinecraftServer server, Map<String, List<ServerPlayer>> playersByNode) {
+        for (String nodeId : NodeOccupationService.getTrackedNodeIds()) {
+            List<ServerPlayer> players = playersByNode.getOrDefault(nodeId, List.of());
+            if (players.isEmpty() || NodeOccupationService.getProgress(nodeId) <= 0.0D) {
+                continue;
+            }
+            CaptureProgressQueryApi.CaptureProgressSnapshot snapshot = CaptureProgressQueryApi.queryByNode(server, nodeId, players);
+            for (ServerPlayer player : players) {
+                WarProjectNetwork.sendCaptureProgress(player, snapshot);
+            }
+        }
+    }
+
+    private void sendNodeDisplay(List<ServerPlayer> players, String nodeId, String factionId, double requiredSeconds) {
+        for (ServerPlayer player : players) {
+            WarProjectNetwork.sendCaptureProgressDisplay(player, nodeId, factionId, requiredSeconds);
+        }
+    }
+
+    private void sendCaptureNotice(MinecraftServer server, MapData.Node node, List<ServerPlayer> players, String attackerFaction, String defenderFaction) {
+        boolean hasDefender = MapData.isFaction(defenderFaction) && !TeamApi.areAllied(server, attackerFaction, defenderFaction);
+        String nodeName = node.name() == null || node.name().isBlank() ? node.id() : node.name();
+        for (ServerPlayer player : players) {
+            String playerFaction = TeamApi.getPlayerTeamId(player).orElse("none");
+            if (TeamApi.areAllied(server, playerFaction, attackerFaction)) {
+                WarProjectNetwork.sendCaptureNotice(player, "Captured " + nodeName, CAPTURE_NOTICE_CAPTURED_COLOR);
+                continue;
+            }
+            if (hasDefender && TeamApi.areAllied(server, playerFaction, defenderFaction)) {
+                WarProjectNetwork.sendCaptureNotice(player, "Lost " + nodeName, CAPTURE_NOTICE_LOST_COLOR);
+            }
+        }
+    }
+
+    private Map<String, List<ServerPlayer>> playersByNode(MinecraftServer server) {
+        Map<String, List<ServerPlayer>> playersByNode = new LinkedHashMap<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            MapData.get(server).findNodeAt(player.chunkPosition().x, player.chunkPosition().z)
+                    .ifPresent(node -> playersByNode
+                            .computeIfAbsent(node.id(), ignored -> new ArrayList<>())
+                            .add(player));
+        }
+        return playersByNode;
+    }
+
+    private Map<String, List<ServerPlayer>> requestedPlayersByNode(MinecraftServer server, int now) {
+        Map<String, List<ServerPlayer>> playersByNode = new LinkedHashMap<>();
+        for (Map.Entry<UUID, CaptureIntent> entry : intents.entrySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player == null || !player.isAlive() || player.isSpectator()) {
+                continue;
+            }
+            String nodeId = entry.getValue().nodeId();
+            Optional<MapData.Node> node = MapData.get(server).node(nodeId);
+            if (node.isEmpty() || !node.get().chunks().contains(player.chunkPosition().toLong())) {
+                continue;
+            }
+            playersByNode.computeIfAbsent(nodeId, ignored -> new ArrayList<>()).add(player);
+        }
+        return playersByNode;
+    }
+
+    private Map<String, Integer> countFactions(List<ServerPlayer> players) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (ServerPlayer player : players) {
+            TeamApi.getPlayerTeamId(player).ifPresent(teamId -> counts.merge(teamId, 1, Integer::sum));
+        }
+        return counts;
     }
 
     private static Optional<Leader> uniqueLeader(Map<String, Integer> counts) {
@@ -148,11 +230,6 @@ public final class WargameService {
     private static double rateForPlayers(int count) {
         double multiplier = 1.0D + Math.max(0, count - 1) * Config.capturePlayerCountRateMultiplier;
         return Math.min(multiplier, Config.capturePlayerCountRateMultiplierCap);
-    }
-
-    private static boolean shouldNeutralize(MapData.Node node, double progressSeconds) {
-        return progressSeconds >= Config.nodeCaptureBaseSeconds * 0.5D
-                && MapData.isFaction(node.factionId());
     }
 
     private record CaptureIntent(String nodeId, int tick) {

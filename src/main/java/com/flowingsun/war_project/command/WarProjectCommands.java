@@ -313,10 +313,15 @@ public final class WarProjectCommands {
 
     private static int progressNode(CommandContext<CommandSourceStack> context) {
         String nodeId = StringArgumentType.getString(context, "nodeId");
-        String message = CaptureProgressQueryApi.progress(nodeId)
-                .map(progress -> "Progress node=" + progress.nodeId() + " attacker=" + progress.attackerFactionId()
-                        + " seconds=" + String.format(java.util.Locale.ROOT, "%.2f", progress.progressSeconds()))
-                .orElse("No active progress for node: " + nodeId);
+        if (MapData.get(server(context)).node(nodeId).isEmpty()) {
+            return fail(context, "Node not found: " + nodeId);
+        }
+        CaptureProgressQueryApi.CaptureProgressSnapshot snapshot = CaptureProgressQueryApi.queryByNode(server(context), nodeId);
+        String message = "Progress node=" + snapshot.nodeId()
+                + " attacker=" + snapshot.attackerFaction() + " defender=" + snapshot.defenderFaction()
+                + " seconds=" + String.format(java.util.Locale.ROOT, "%.2f", snapshot.progressSeconds())
+                + " / " + String.format(java.util.Locale.ROOT, "%.2f", snapshot.requiredSeconds())
+                + " neutralized=" + snapshot.neutralized();
         context.getSource().sendSuccess(() -> Component.literal(message), false);
         return 1;
     }

@@ -113,7 +113,7 @@ public final class FtbChunksMapDivideClient {
     @SubscribeEvent
     public static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
         Optional<LargeMapScreen> largeMap = largeMapScreen(event.getScreen());
-        if (largeMap.isEmpty() || event.getButton() != MouseButton.LEFT.id) {
+        if (largeMap.isEmpty()) {
             return;
         }
         if (TOOLBAR.mousePressedOnOverlay(largeMap.get(), event.getMouseX(), event.getMouseY())) {
@@ -127,11 +127,30 @@ public final class FtbChunksMapDivideClient {
         if (context.isEmpty() || !context.get().contains(event.getMouseX(), event.getMouseY())) {
             return;
         }
-        if (mode == Mode.NODE || mode == Mode.WARZONE) {
+        if (event.getButton() == MouseButton.RIGHT.id) {
+            if (mode == Mode.NONE) {
+                // Not editing: leave right-click entirely to FTB Chunks.
+                return;
+            }
             ChunkPos chunk = context.get().chunkAt(event.getMouseX(), event.getMouseY());
-            beginDrag(chunk.toLong());
-            event.setCanceled(true);
+            if (openEditMenu(largeMap.get(), chunk)) {
+                event.setCanceled(true);
+            }
+            return;
         }
+        if (event.getButton() != MouseButton.LEFT.id) {
+            return;
+        }
+        if (mode != Mode.NODE && mode != Mode.WARZONE) {
+            return;
+        }
+        if (Screen.hasShiftDown()) {
+            // Shift + left drag pans the map; leave the event for FTB Chunks.
+            return;
+        }
+        ChunkPos chunk = context.get().chunkAt(event.getMouseX(), event.getMouseY());
+        beginDrag(chunk.toLong());
+        event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -205,10 +224,87 @@ public final class FtbChunksMapDivideClient {
         return mode == Mode.WARZONE && pendingNode != null && pendingNode.nodeChunks().contains(chunk);
     }
 
-    private static void startNodeSelection() {
-        mode = mode == Mode.NODE ? Mode.NONE : Mode.NODE;
-        pendingNode = null;
-        warzoneSelection.clear();
+    /**
+     * The Node button toggles node editing: pressing it while editing exits and clears the selection.
+     */
+    private static void toggleNodeEditing() {
+        if (mode == Mode.NONE) {
+            mode = Mode.NODE;
+            pendingNode = null;
+            warzoneSelection.clear();
+            showClientMessage("Node editing on - drag to select chunks, Shift+drag to pan, right-click a node to edit it.");
+            return;
+        }
+        clearState();
+        showClientMessage("Node editing off.");
+    }
+
+    /**
+     * Right-click menu for an existing node. Right-clicking a warzone resolves to the node it belongs
+     * to, so both are the same action. Returns false when nothing is there, so the event is left for
+     * FTB Chunks.
+     */
+    private static boolean openEditMenu(LargeMapScreen largeMap, ChunkPos chunk) {
+        long chunkKey = chunk.toLong();
+        Optional<ClientMapState.ClientNode> node = nodeAtChunk(chunkKey)
+                .or(() -> warzoneAtChunk(chunkKey).flatMap(warzone -> nodeById(warzone.nodeId())));
+        if (node.isEmpty()) {
+            return false;
+        }
+        ClientMapState.ClientNode target = node.get();
+        largeMap.openContextMenu(java.util.List.of(
+                dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Node: " + displayName(target.name(), target.id()))),
+                dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("ID: " + target.id() + "  chunks: " + target.chunks().size())),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Edit node"), Icons.ACCEPT, button -> openRenameNodePrompt(largeMap, target)),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Delete node"), Icons.REMOVE, button -> WarProjectNetwork.sendDeleteNode(target.id())),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Cancel"), Icons.CANCEL, button -> {
+                })
+        ));
+        return true;
+    }
+
+    /**
+     * Reopens the name/id prompt prefilled with the current values; confirming renames the node.
+     */
+    private static void openRenameNodePrompt(LargeMapScreen screen, ClientMapState.ClientNode node) {
+        schedulePrompt(() -> {
+            NameIdPromptOverlay overlay = new NameIdPromptOverlay(screen.getGui(), Component.literal("Edit Node"),
+                    "Node Name", displayName(node.name(), node.id()),
+                    "Node ID", node.id(), (accepted, name, id) -> {
+                        if (!accepted) {
+                            return;
+                        }
+                        WarProjectNetwork.sendRenameNode(node.id(), id, name);
+                    }).atMousePosition();
+            overlay.setExtraZlevel(INPUT_MODAL_Z);
+            screen.getGui().pushModalPanel(overlay);
+        });
+    }
+
+    private static Optional<ClientMapState.ClientNode> nodeAtChunk(long chunkKey) {
+        for (ClientMapState.ClientNode node : ClientMapState.nodes().values()) {
+            if (node.chunks().contains(chunkKey)) {
+                return Optional.of(node);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ClientMapState.ClientWarzone> warzoneAtChunk(long chunkKey) {
+        for (ClientMapState.ClientWarzone warzone : ClientMapState.warzones().values()) {
+            if (warzone.chunks().contains(chunkKey)) {
+                return Optional.of(warzone);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ClientMapState.ClientNode> nodeById(String nodeId) {
+        return Optional.ofNullable(ClientMapState.nodes().get(nodeId));
+    }
+
+    private static String displayName(String name, String fallback) {
+        return name == null || name.isBlank() ? fallback : name;
     }
 
     private static void beginCreateNode(LargeMapScreen screen) {
@@ -323,9 +419,7 @@ public final class FtbChunksMapDivideClient {
             largeMap.openContextMenu(java.util.List.of(
                     dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Node selection: " + nodeSelection.size() + " chunks")),
                     new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Create node"), Icons.ACCEPT, button -> beginCreateNode(largeMap)),
-                    new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Clear selection"), Icons.REMOVE, button -> nodeSelection.clear()),
-                    new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Cancel"), Icons.CANCEL, button -> {
-                    })
+                    new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Cancel"), Icons.CANCEL, button -> nodeSelection.clear())
             ));
         } else if (mode == Mode.WARZONE && pendingNode != null) {
             largeMap.openContextMenu(java.util.List.of(
@@ -653,21 +747,19 @@ public final class FtbChunksMapDivideClient {
             if (mode == Mode.WARZONE && pendingNode != null) {
                 width += TOOLBAR_GAP + buttonWidth("Confirm Warzone", 120);
             }
-            width += TOOLBAR_GAP + buttonWidth("Clear", 64);
             return width + 4;
         }
 
         @Override
         public void addWidgets() {
             layoutX = 2;
-            addToolButton("Node", 72, Icons.MAP, () -> mode == Mode.NODE, FtbChunksMapDivideClient::startNodeSelection);
+            addToolButton("Node", 72, Icons.MAP, () -> mode != Mode.NONE, FtbChunksMapDivideClient::toggleNodeEditing);
             if (mode == Mode.NODE && !nodeSelection.isEmpty()) {
                 addToolButton("Create Node", 92, Icons.ACCEPT, () -> false, () -> beginCreateNode(largeMap));
             }
             if (mode == Mode.WARZONE && pendingNode != null) {
                 addToolButton("Confirm Warzone", 120, Icons.ACCEPT, () -> false, FtbChunksMapDivideClient::confirmWarzone);
             }
-            addToolButton("Clear", 64, Icons.REMOVE, () -> false, FtbChunksMapDivideClient::clearState);
         }
 
         @Override

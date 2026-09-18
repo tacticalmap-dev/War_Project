@@ -69,6 +69,17 @@ description='''${mod_description}'''
     ordering="NONE"
     side="BOTH"
 
+# Optional: War Project declares its teams and alliances as e33chat chat groups so
+# they show up as group tabs. The bridge is reflective, so the mod runs without
+# e33chat. 2.1.0 is the first build carrying the group API; the bridge targets the
+# 2.4.13 build, where that API is backed by e33chat's in-mod group engine.
+[[dependencies.${mod_id}]]
+    modId="e33chat"
+    mandatory=false
+    versionRange="[2.1.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
 [[dependencies.${mod_id}]]
     modId="architectury"
     mandatory=false

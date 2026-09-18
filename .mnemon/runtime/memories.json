@@ -1,4 +1,26 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {
+      "content": "War Project 环境路径：参考模组源码在 E:\\mc_mod_dev\\modernwar-town；构建产物部署（同步）目标为 D:\\mc\\.minecraft\\versions\\totalwar\\mods\\war_project-1.0.0.jar",
+      "created_at": "2026-09-12T07:03:48.021Z",
+      "updated_at": "2026-09-12T07:03:48.021Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "War Project 规则基线（用户明确定下，勿再询问）：node 用字符串 id 作真实主键；占领始终允许（无战时/和平状态、无城镇层级）；删除全部客户端命令，只保留 /warproject 服务端命令；FTB/Architectury/Xaero 一律为可选依赖；Xaero 中 node 边界实线、战区边界虚线、虚线长度随缩放、线宽恒定 1px（1px 是 fill 的像素下限，无法更细），世界地图最小缩放 1x，node 名称画在 node 区块几何中心（世界地图与小地图都要）；小地图几何走 Xaero FBO（注入 MinimapElementMapRendererHandler.beforeRender 的 RETURN），屏幕层只画名称并在 FBO 不可用时兜底画几何，两路以「最近 1 秒活跃」门控避免重复绘制；FTB 大地图编辑器里右键战区与右键 node 同义（都编辑其所属 node），选择菜单只保留一个取消项，且仅在 node/WARZONE 编辑模式下才拦截 FTB 原有鼠标行为。用户硬性要求：不得猜测，每一步都必须先读源代码（含 javap 反编译字节码）验证。",
+      "created_at": "2026-09-12T11:54:29.663Z",
+      "updated_at": "2026-09-18T20:53:31.663Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "War_Project × e33chat 适配（2026-09-19 落地）：队伍/同盟→e33chat 群组全部由 team 包内的 team/TeamE33ChatBridge 负责（纯反射调用 com.niuqu.chatbubble.api.E33ChatGroupApi#replaceOwnerGroups，owner=\"war_project\"，group id 形如 war_project:team:<teamId> / war_project:ally:<簇锚点>），同步触发点只有 team 包内三处：TeamApi.broadcast（队伍变更命令共同出口）、TeamModule.onServerStarting、TeamModule.onPlayerLoggedIn（自愈）；同盟按「同盟簇」（盟友连通分量）建组，名字前缀「盟·」。装有 e33chat 且群组引擎可用时 /warproject team msg switch 只提示、队伍频道交给 e33chat 群组页签，e33chat 缺失或 groups_enabled=false 时回退到本模组自己的队伍频道；不用自己的离线补员（e33chat 登录钩子负责）。用户偏好：跨模块适配代码一律归入对应模块包（如 team/），不散落到顶层入口。",
+      "created_at": "2026-09-18T18:28:15.127Z",
+      "updated_at": "2026-09-18T18:28:15.127Z",
+      "target": "memory",
+      "importance": "normal"
+    }
+  ]
 }

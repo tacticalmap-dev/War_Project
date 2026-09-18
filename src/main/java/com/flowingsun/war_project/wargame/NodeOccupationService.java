@@ -1,8 +1,12 @@
 package com.flowingsun.war_project.wargame;
 
+import com.flowingsun.war_project.Config;
+
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class NodeOccupationService {
     private static final Map<String, Progress> PROGRESS = new LinkedHashMap<>();
@@ -11,24 +15,53 @@ public final class NodeOccupationService {
     }
 
     public static Optional<Progress> progress(String nodeId) {
-        return Optional.ofNullable(PROGRESS.get(nodeId));
+        return nodeId == null ? Optional.empty() : Optional.ofNullable(PROGRESS.get(nodeId));
     }
 
-    public static void setProgress(String nodeId, String attackerFactionId, double value) {
-        PROGRESS.put(nodeId, new Progress(nodeId, attackerFactionId, Math.max(0.0D, value)));
+    public static void setProgress(String nodeId, String attackerFactionId, String previousFactionId, boolean neutralized, double value) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return;
+        }
+        PROGRESS.put(nodeId, new Progress(nodeId, attackerFactionId, previousFactionId, neutralized, Math.max(0.0D, value)));
     }
 
     public static void clear(String nodeId) {
-        PROGRESS.remove(nodeId);
+        if (nodeId != null) {
+            PROGRESS.remove(nodeId);
+        }
     }
 
     public static void renameNode(String oldNodeId, String newNodeId) {
         Progress old = PROGRESS.remove(oldNodeId);
         if (old != null) {
-            PROGRESS.put(newNodeId, new Progress(newNodeId, old.attackerFactionId(), old.progressSeconds()));
+            PROGRESS.put(newNodeId, new Progress(newNodeId, old.attackerFactionId(), old.previousFactionId(), old.neutralized(), old.progressSeconds()));
         }
     }
 
-    public record Progress(String nodeId, String attackerFactionId, double progressSeconds) {
+    public static Set<String> getTrackedNodeIds() {
+        return new LinkedHashSet<>(PROGRESS.keySet());
+    }
+
+    public static String getPendingFaction(String nodeId) {
+        return progress(nodeId).map(Progress::attackerFactionId).orElse("none");
+    }
+
+    public static String getPreviousFaction(String nodeId) {
+        return progress(nodeId).map(Progress::previousFactionId).orElse("none");
+    }
+
+    public static boolean isNeutralized(String nodeId) {
+        return progress(nodeId).map(Progress::neutralized).orElse(false);
+    }
+
+    public static double getProgress(String nodeId) {
+        return progress(nodeId).map(Progress::progressSeconds).orElse(0.0D);
+    }
+
+    public static double getRequiredProgress() {
+        return Math.max(1.0D, Config.nodeCaptureBaseSeconds);
+    }
+
+    public record Progress(String nodeId, String attackerFactionId, String previousFactionId, boolean neutralized, double progressSeconds) {
     }
 }

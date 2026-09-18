@@ -1,6 +1,5 @@
 package com.flowingsun.war_project;
 
-import com.flowingsun.war_project.client.WargameCaptureClient;
 import com.flowingsun.war_project.map.MapDivideModule;
 import com.flowingsun.war_project.module.ModuleRegistry;
 import com.flowingsun.war_project.module.WarProjectModule;
@@ -81,7 +80,6 @@ public class WarProject {
     public static class ClientModEvents {
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
-            MinecraftForge.EVENT_BUS.register(WargameCaptureClient.class);
             if (clientModuleRegistry != null) {
                 clientModuleRegistry.onClientSetup(event);
             }
