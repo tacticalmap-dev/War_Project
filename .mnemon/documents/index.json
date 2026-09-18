@@ -55,7 +55,7 @@
       ],
       "createdAt": "2026-09-12T11:54:24.005Z",
       "updatedAt": "2026-09-12T11:54:24.005Z",
-      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "lastAccessedAt": "2026-09-18T21:14:14.255Z",
       "revision": 1,
       "contentHash": "5bb9b601c598c4d9f7ea5984815a32ec4711f201afdf9f677bda2d95c363883c",
       "sizeBytes": 9176,
@@ -80,7 +80,7 @@
       ],
       "createdAt": "2026-09-18T17:35:49.645Z",
       "updatedAt": "2026-09-18T17:35:49.645Z",
-      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "lastAccessedAt": "2026-09-18T21:14:14.255Z",
       "revision": 1,
       "contentHash": "be8538bfcd5b0948113156975b574ad9fa808ed4bca6f47a8cc8a22440a8a700",
       "sizeBytes": 9597,
@@ -187,7 +187,7 @@
       ],
       "createdAt": "2026-09-18T20:32:33.083Z",
       "updatedAt": "2026-09-18T20:32:33.083Z",
-      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "lastAccessedAt": "2026-09-18T21:14:14.255Z",
       "revision": 1,
       "contentHash": "e38f9422e91955aef838ef217555e57440355cc7ae7724cd65e68117d779179c",
       "sizeBytes": 7969,
@@ -237,10 +237,33 @@
       ],
       "createdAt": "2026-09-18T20:53:46.236Z",
       "updatedAt": "2026-09-18T20:53:46.236Z",
-      "lastAccessedAt": "2026-09-18T20:53:46.236Z",
+      "lastAccessedAt": "2026-09-18T21:14:14.255Z",
       "revision": 1,
       "contentHash": "433ffd42145ca7042ecf2b5f14c5630aaa109e98c0e64891d7cf81cfd8319cbb",
       "sizeBytes": 10357,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "465b774a-b054-4ad1-a532-bd28c94919f7",
+      "title": "世界地图叠加层亚像素线宽：POSITION_COLOR 浮点 quad 取代 GuiGraphics.fill",
+      "description": "世界地图叠加层改用自建 POSITION_COLOR 浮点 quad 实现亚像素线宽（EDGE_WIDTH=0.5）的设计与字节码证据；取代 d33309cb / 8eb90438 中「用 fill 绘制、1px 是下限」的记载。改该渲染前先读本文。",
+      "status": "active",
+      "filename": "position-color-quad-guigraphics-fill-465b774a.md",
+      "relativePath": "documents/active/position-color-quad-guigraphics-fill-465b774a.md",
+      "sourcePaths": [
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java"
+      ],
+      "sessionIds": [
+        "f003a139-913a-4204-aa6a-3caba1ae5680"
+      ],
+      "createdAt": "2026-09-18T21:14:32.775Z",
+      "updatedAt": "2026-09-18T21:14:32.775Z",
+      "lastAccessedAt": "2026-09-18T21:14:32.775Z",
+      "revision": 1,
+      "contentHash": "c5d9ff3556af1ad83aec5007e9b1d7f5aabcf06736dbf3a3fb66a8f4663dc598",
+      "sizeBytes": 9003,
       "memoryBodyIds": []
     }
   ]

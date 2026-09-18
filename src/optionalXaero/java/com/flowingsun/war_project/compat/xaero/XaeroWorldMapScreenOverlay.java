@@ -4,24 +4,44 @@ import com.flowingsun.war_project.WarProject;
 import com.flowingsun.war_project.client.ClientMapState;
 import com.flowingsun.war_project.client.xaero.XaeroWarProjectMapRenderer;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.joml.Matrix4f;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * War Project overlay for Xaero's world map.
+ *
+ * <p>Everything is emitted as raw {@code POSITION_COLOR} quads at float coordinates instead of using
+ * {@link GuiGraphics#fill(int, int, int, int, int)}. That method takes ints, so it can never draw a
+ * line thinner than one logical pixel, and one logical pixel becomes {@code guiScale} physical
+ * pixels on screen. Building the quads directly allows a sub-pixel {@link #EDGE_WIDTH} hairline and
+ * keeps fills aligned to the very same coordinates as the edges.
+ *
+ * <p>All geometry stays in float space end to end. Rounding any axis to whole pixels makes a
+ * horizontal edge start up to one pixel away from the vertical edge it should meet, and rounding the
+ * overlap test to whole pixels can drop that same pixel, so corners end up open or spiked.
+ */
 @Mod.EventBusSubscriber(modid = WarProject.MODID, value = Dist.CLIENT)
 public final class XaeroWorldMapScreenOverlay {
     private static final String XAERO_WORLD_MAP_SCREEN = "xaero.map.gui.GuiMap";
@@ -29,6 +49,28 @@ public final class XaeroWorldMapScreenOverlay {
     private static final int EDGE_PRIORITY_NODE = 1;
     private static final int LABEL_COLOR = 0xFFFFFFFF;
     private static final int LABEL_MAX_LENGTH = 16;
+    private static final double MIN_GUI_SCALE = 0.015D;
+
+    /**
+     * Edge thickness in logical pixels. Values below 1.0 rely on the rasteriser: at {@code guiScale}
+     * 1 a 0.5 px line covers half a pixel and therefore renders dimmer, and at higher GUI scales it
+     * stays visibly narrower than the one-pixel floor {@code GuiGraphics#fill} is stuck with.
+     */
+    private static final float EDGE_WIDTH = 0.5F;
+
+    /**
+     * Band positions are snapped to 1/8 of a pixel so that float noise cannot split what is really
+     * one edge into two different bands, which would break merging and overlap detection.
+     */
+    private static final float BAND_QUANTUM = 8.0F;
+
+    /**
+     * Touching segments merge. Neighbouring chunks compute a shared border from the same world
+     * coordinate, so they meet exactly; the tolerance only absorbs float noise, and is far below the
+     * smallest real dash gap.
+     */
+    private static final float MERGE_EPSILON = 0.01F;
+
     private static Field cameraXField;
     private static Field cameraZField;
     private static Field scaleField;
@@ -42,17 +84,31 @@ public final class XaeroWorldMapScreenOverlay {
         if (!XAERO_WORLD_MAP_SCREEN.equals(event.getScreen().getClass().getName())) {
             return;
         }
-        Optional<MapProjection> projectionOpt = readProjection(event.getScreen(), event.getScreen().width, event.getScreen().height);
-        if (projectionOpt.isEmpty() || projectionOpt.get().guiScale() < 0.015D) {
+        int screenWidth = event.getScreen().width;
+        int screenHeight = event.getScreen().height;
+        Optional<MapProjection> projectionOpt = readProjection(event.getScreen(), screenWidth, screenHeight);
+        if (projectionOpt.isEmpty() || projectionOpt.get().guiScale() < MIN_GUI_SCALE) {
             return;
         }
+        MapProjection projection = projectionOpt.get();
+        GuiGraphics graphics = event.getGuiGraphics();
+        Matrix4f matrix = graphics.pose().last().pose();
 
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        drawWarzoneFills(event.getGuiGraphics(), projectionOpt.get(), event.getScreen().width, event.getScreen().height);
-        drawEdges(event.getGuiGraphics(), projectionOpt.get(), event.getScreen().width, event.getScreen().height);
-        drawLabels(event.getGuiGraphics(), projectionOpt.get(), event.getScreen().width, event.getScreen().height);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        // The map screen may still hold an open batch on the shared tesselator builder; submit it so
+        // the overlay lands on top and the builder is free for the overlay's own vertices.
+        graphics.flush();
+
+        BufferBuilder buffer = Tesselator.getInstance().getBuilder();
+        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        drawWarzoneFills(buffer, matrix, projection, screenWidth, screenHeight);
+        drawEdges(buffer, matrix, projection, screenWidth, screenHeight);
+        BufferUploader.drawWithShader(buffer.end());
+
+        drawLabels(graphics, projection, screenWidth, screenHeight);
     }
 
     /**
@@ -70,17 +126,17 @@ public final class XaeroWorldMapScreenOverlay {
                 continue;
             }
             ChunkPos chunk = new ChunkPos((int) Math.floor(center[0]) >> 4, (int) Math.floor(center[1]) >> 4);
-            Rect rect = chunkRect(projection, chunk.x, chunk.z, chunk.x + 1, chunk.z + 1);
+            FloatRect rect = chunkRect(projection, chunk.x, chunk.z, chunk.x + 1, chunk.z + 1);
             if (!rect.intersects(screenWidth, screenHeight)) {
                 continue;
             }
-            int centerX = (rect.x1() + rect.x2()) / 2;
-            int centerY = (rect.y1() + rect.y2()) / 2;
+            int centerX = Math.round((rect.x1() + rect.x2()) * 0.5F);
+            int centerY = Math.round((rect.y1() + rect.y2()) * 0.5F);
             graphics.drawCenteredString(minecraft.font, label, centerX, centerY - 4, LABEL_COLOR);
         }
     }
 
-    private static void drawWarzoneFills(GuiGraphics graphics, MapProjection projection, int screenWidth, int screenHeight) {
+    private static void drawWarzoneFills(BufferBuilder buffer, Matrix4f matrix, MapProjection projection, int screenWidth, int screenHeight) {
         Set<Long> drawn = new HashSet<>();
         for (ClientMapState.ClientWarzone warzone : ClientMapState.warzones().values()) {
             int color = XaeroWarProjectMapRenderer.relationFillArgb(warzone.factionId());
@@ -95,32 +151,33 @@ public final class XaeroWorldMapScreenOverlay {
                     drawn.add(ChunkPos.asLong(endChunkX, pos.z));
                     endChunkX++;
                 }
-                drawChunkRun(graphics, projection, pos.x, endChunkX, pos.z, color, screenWidth, screenHeight);
+                FloatRect rect = chunkRect(projection, pos.x, pos.z, endChunkX, pos.z + 1);
+                if (rect.intersects(screenWidth, screenHeight)) {
+                    addQuad(buffer, matrix, rect.x1(), rect.y1(), rect.x2(), rect.y2(), color);
+                }
             }
         }
     }
 
-    private static void drawEdges(GuiGraphics graphics, MapProjection projection, int screenWidth, int screenHeight) {
+    private static void drawEdges(BufferBuilder buffer, Matrix4f matrix, MapProjection projection, int screenWidth, int screenHeight) {
         int chunkPixels = chunkPixelSize(projection);
-        XaeroWarProjectMapRenderer.DashPattern dashPattern = XaeroWarProjectMapRenderer.dashPattern(chunkPixels);
-        int thickness = XaeroWarProjectMapRenderer.edgeThickness(chunkPixels);
-        EdgeCollector collector = new EdgeCollector(dashPattern);
+        EdgeCollector collector = new EdgeCollector(XaeroWarProjectMapRenderer.dashPattern(chunkPixels));
         // Node edges are solid and outrank warzone edges; warzone edges are dashed.
-        collectWarzoneEdges(collector, projection, thickness, screenWidth, screenHeight);
-        collectNodeEdges(collector, projection, thickness, screenWidth, screenHeight);
-        collector.draw(graphics);
+        collectWarzoneEdges(collector, projection, screenWidth, screenHeight);
+        collectNodeEdges(collector, projection, screenWidth, screenHeight);
+        collector.draw(buffer, matrix);
     }
 
-    private static void collectWarzoneEdges(EdgeCollector collector, MapProjection projection, int thickness, int screenWidth, int screenHeight) {
+    private static void collectWarzoneEdges(EdgeCollector collector, MapProjection projection, int screenWidth, int screenHeight) {
         for (ClientMapState.ClientWarzone warzone : ClientMapState.warzones().values()) {
             int color = XaeroWarProjectMapRenderer.relationEdgeArgb(warzone.factionId());
             for (long key : warzone.chunks()) {
                 ChunkPos pos = new ChunkPos(key);
-                Rect rect = chunkRect(projection, pos.x, pos.z, pos.x + 1, pos.z + 1);
+                FloatRect rect = chunkRect(projection, pos.x, pos.z, pos.x + 1, pos.z + 1);
                 if (!rect.intersects(screenWidth, screenHeight)) {
                     continue;
                 }
-                collectChunkEdges(collector, rect, color, true, thickness,
+                collectChunkEdges(collector, rect, color, true,
                         XaeroWarProjectMapRenderer.shouldDrawWarzoneEdge(warzone, pos.x - 1, pos.z),
                         XaeroWarProjectMapRenderer.shouldDrawWarzoneEdge(warzone, pos.x + 1, pos.z),
                         XaeroWarProjectMapRenderer.shouldDrawWarzoneEdge(warzone, pos.x, pos.z - 1),
@@ -130,16 +187,16 @@ public final class XaeroWorldMapScreenOverlay {
         }
     }
 
-    private static void collectNodeEdges(EdgeCollector collector, MapProjection projection, int thickness, int screenWidth, int screenHeight) {
+    private static void collectNodeEdges(EdgeCollector collector, MapProjection projection, int screenWidth, int screenHeight) {
         for (ClientMapState.ClientNode node : ClientMapState.nodes().values()) {
             int color = XaeroWarProjectMapRenderer.relationEdgeArgb(node.factionId());
             for (long key : node.chunks()) {
                 ChunkPos pos = new ChunkPos(key);
-                Rect rect = chunkRect(projection, pos.x, pos.z, pos.x + 1, pos.z + 1);
+                FloatRect rect = chunkRect(projection, pos.x, pos.z, pos.x + 1, pos.z + 1);
                 if (!rect.intersects(screenWidth, screenHeight)) {
                     continue;
                 }
-                collectChunkEdges(collector, rect, color, false, thickness,
+                collectChunkEdges(collector, rect, color, false,
                         !node.chunks().contains(ChunkPos.asLong(pos.x - 1, pos.z)),
                         !node.chunks().contains(ChunkPos.asLong(pos.x + 1, pos.z)),
                         !node.chunks().contains(ChunkPos.asLong(pos.x, pos.z - 1)),
@@ -149,100 +206,125 @@ public final class XaeroWorldMapScreenOverlay {
         }
     }
 
-    private static void drawChunkRun(GuiGraphics graphics, MapProjection projection, int startChunkX, int endChunkX, int chunkZ, int color, int screenWidth, int screenHeight) {
-        Rect rect = fillRect(projection, startChunkX, chunkZ, endChunkX, chunkZ + 1);
-        if (rect.intersects(screenWidth, screenHeight)) {
-            graphics.fill(rect.x1(), rect.y1(), rect.x2(), rect.y2(), color);
-        }
-    }
-
     /**
-     * Adds the requested edge of one chunk as a band of {@code thickness} pixels that always stays inside the chunk rect.
+     * Adds the requested edge of one chunk as a sub-pixel band that always stays inside the chunk
+     * rect. Both axes keep their float coordinates, so an edge run reaches exactly the chunk corner
+     * and meets the perpendicular edge there instead of stopping on a rounded pixel.
      */
-    private static void collectChunkEdges(EdgeCollector collector, Rect rect, int color, boolean dashed, int thickness, boolean west, boolean east, boolean north, boolean south, int priority) {
+    private static void collectChunkEdges(EdgeCollector collector, FloatRect rect, int color, boolean dashed, boolean west, boolean east, boolean north, boolean south, int priority) {
         if (west) {
-            collector.addVertical(rect.x1(), rect.x1() + thickness, rect.y1(), rect.y2(), color, dashed, priority);
+            collector.addVertical(rect.x1(), rect.x1() + EDGE_WIDTH, rect.y1(), rect.y2(), color, dashed, priority);
         }
         if (east) {
-            collector.addVertical(rect.x2() - thickness, rect.x2(), rect.y1(), rect.y2(), color, dashed, priority);
+            collector.addVertical(rect.x2() - EDGE_WIDTH, rect.x2(), rect.y1(), rect.y2(), color, dashed, priority);
         }
         if (north) {
-            collector.addHorizontal(rect.y1(), rect.y1() + thickness, rect.x1(), rect.x2(), color, dashed, priority);
+            collector.addHorizontal(rect.y1(), rect.y1() + EDGE_WIDTH, rect.x1(), rect.x2(), color, dashed, priority);
         }
         if (south) {
-            collector.addHorizontal(rect.y2() - thickness, rect.y2(), rect.x1(), rect.x2(), color, dashed, priority);
+            collector.addHorizontal(rect.y2() - EDGE_WIDTH, rect.y2(), rect.x1(), rect.x2(), color, dashed, priority);
         }
     }
 
-    private static void drawVerticalLineAvoiding(GuiGraphics graphics, int bandStart, int bandEnd, int y1, int y2, int color, boolean dashed, XaeroWarProjectMapRenderer.DashPattern dashPattern, Set<Long> reservedPixels) {
-        int runStart = Integer.MIN_VALUE;
-        for (int y = y1; y < y2; y++) {
-            boolean drawPixel = !isBandReserved(reservedPixels, true, bandStart, bandEnd, y)
-                    && (!dashed || y2 - y1 < dashPattern.minimumDashedLength() || dashPattern.on(y));
-            if (drawPixel) {
-                if (runStart == Integer.MIN_VALUE) {
-                    runStart = y;
-                }
-            } else if (runStart != Integer.MIN_VALUE) {
-                graphics.fill(bandStart, runStart, bandEnd, y, color);
-                runStart = Integer.MIN_VALUE;
-            }
+    private static void addQuad(BufferBuilder buffer, Matrix4f matrix, float x1, float y1, float x2, float y2, int argb) {
+        float left = Math.min(x1, x2);
+        float right = Math.max(x1, x2);
+        float top = Math.min(y1, y2);
+        float bottom = Math.max(y1, y2);
+        if (right <= left || bottom <= top) {
+            return;
         }
-        if (runStart != Integer.MIN_VALUE) {
-            graphics.fill(bandStart, runStart, bandEnd, y2, color);
-        }
-        reserveBand(reservedPixels, true, bandStart, bandEnd, y1, y2);
-    }
-
-    private static void drawHorizontalLineAvoiding(GuiGraphics graphics, int bandStart, int bandEnd, int x1, int x2, int color, boolean dashed, XaeroWarProjectMapRenderer.DashPattern dashPattern, Set<Long> reservedPixels) {
-        int runStart = Integer.MIN_VALUE;
-        for (int x = x1; x < x2; x++) {
-            boolean drawPixel = !isBandReserved(reservedPixels, false, bandStart, bandEnd, x)
-                    && (!dashed || x2 - x1 < dashPattern.minimumDashedLength() || dashPattern.on(x));
-            if (drawPixel) {
-                if (runStart == Integer.MIN_VALUE) {
-                    runStart = x;
-                }
-            } else if (runStart != Integer.MIN_VALUE) {
-                graphics.fill(runStart, bandStart, x, bandEnd, color);
-                runStart = Integer.MIN_VALUE;
-            }
-        }
-        if (runStart != Integer.MIN_VALUE) {
-            graphics.fill(runStart, bandStart, x2, bandEnd, color);
-        }
-        reserveBand(reservedPixels, false, bandStart, bandEnd, x1, x2);
-    }
-
-    /**
-     * Vertical bands span x = [bandStart, bandEnd) and vary with y; horizontal bands span y and vary with x.
-     * The reserved pixel is always keyed as (x, y).
-     */
-    private static boolean isBandReserved(Set<Long> reservedPixels, boolean vertical, int bandStart, int bandEnd, int parallelCoordinate) {
-        for (int offset = bandStart; offset < bandEnd; offset++) {
-            long pixel = vertical ? packedPixel(offset, parallelCoordinate) : packedPixel(parallelCoordinate, offset);
-            if (reservedPixels.contains(pixel)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static void reserveBand(Set<Long> reservedPixels, boolean vertical, int bandStart, int bandEnd, int start, int end) {
-        for (int parallelCoordinate = start; parallelCoordinate < end; parallelCoordinate++) {
-            for (int offset = bandStart; offset < bandEnd; offset++) {
-                reservedPixels.add(vertical ? packedPixel(offset, parallelCoordinate) : packedPixel(parallelCoordinate, offset));
-            }
-        }
+        int alpha = (argb >>> 24) & 0xFF;
+        int red = (argb >>> 16) & 0xFF;
+        int green = (argb >>> 8) & 0xFF;
+        int blue = argb & 0xFF;
+        // Same winding as GuiGraphics#fill so both paths share one cull state.
+        buffer.vertex(matrix, left, bottom, 0.0F).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, right, bottom, 0.0F).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, right, top, 0.0F).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, left, top, 0.0F).color(red, green, blue, alpha).endVertex();
     }
 
     private static int chunkPixelSize(MapProjection projection) {
-        Rect sample = chunkRect(projection, 0, 0, 1, 1);
-        return Math.max(1, Math.max(sample.x2() - sample.x1(), sample.y2() - sample.y1()));
+        FloatRect sample = chunkRect(projection, 0, 0, 1, 1);
+        return Math.max(1, Math.round(Math.max(sample.x2() - sample.x1(), sample.y2() - sample.y1())));
     }
 
-    private static long packedPixel(int x, int y) {
-        return ((long) x << 32) ^ (y & 0xFFFFFFFFL);
+    private static int quantiseBand(float band) {
+        return Math.round(band * BAND_QUANTUM);
+    }
+
+    /**
+     * Walks a run in whole-pixel steps only to decide where the dash pattern flips, while every
+     * emitted span keeps its exact float ends. An un-dashed run therefore starts and stops on the
+     * true corner coordinate instead of on a rounded one.
+     */
+    private static void drawSpan(BufferBuilder buffer, Matrix4f matrix, boolean vertical, float bandStart, float bandEnd, float start, float end, int color, boolean dashed, XaeroWarProjectMapRenderer.DashPattern dashPattern) {
+        if (end <= start) {
+            return;
+        }
+        boolean solid = !dashed || end - start < dashPattern.minimumDashedLength();
+        int firstStep = (int) Math.floor(start);
+        int lastStep = (int) Math.ceil(end);
+        boolean inRun = false;
+        float runStart = 0.0F;
+        for (int step = firstStep; step < lastStep; step++) {
+            float stepStart = Math.max(start, step);
+            float stepEnd = Math.min(end, step + 1);
+            if (stepEnd <= stepStart) {
+                continue;
+            }
+            if (solid || dashPattern.on(step)) {
+                if (!inRun) {
+                    runStart = stepStart;
+                    inRun = true;
+                }
+            } else if (inRun) {
+                emitSpan(buffer, matrix, vertical, bandStart, bandEnd, runStart, stepStart, color);
+                inRun = false;
+            }
+        }
+        if (inRun) {
+            emitSpan(buffer, matrix, vertical, bandStart, bandEnd, runStart, end, color);
+        }
+    }
+
+    private static void emitSpan(BufferBuilder buffer, Matrix4f matrix, boolean vertical, float bandStart, float bandEnd, float start, float end, int color) {
+        if (end <= start) {
+            return;
+        }
+        if (vertical) {
+            addQuad(buffer, matrix, bandStart, start, bandEnd, end, color);
+        } else {
+            addQuad(buffer, matrix, start, bandStart, end, bandEnd, color);
+        }
+    }
+
+    /**
+     * Removes the parts of [start, end] that a higher priority line already painted on the very same
+     * band. Comparison is exact in float space, so a lower priority line never eats the one pixel a
+     * perpendicular line needs to close a corner, and never blends two colours on the same pixel.
+     */
+    private static List<float[]> subtractCovered(float start, float end, List<float[]> covered) {
+        List<float[]> free = new ArrayList<>();
+        free.add(new float[]{start, end});
+        for (float[] cover : covered) {
+            List<float[]> next = new ArrayList<>();
+            for (float[] span : free) {
+                if (cover[1] <= span[0] || cover[0] >= span[1]) {
+                    next.add(span);
+                    continue;
+                }
+                if (cover[0] > span[0]) {
+                    next.add(new float[]{span[0], cover[0]});
+                }
+                if (cover[1] < span[1]) {
+                    next.add(new float[]{cover[1], span[1]});
+                }
+            }
+            free = next;
+        }
+        return free;
     }
 
     private static final class EdgeCollector {
@@ -253,23 +335,23 @@ public final class XaeroWorldMapScreenOverlay {
             this.dashPattern = dashPattern;
         }
 
-        void addVertical(int bandStart, int bandEnd, int y1, int y2, int color, boolean dashed, int priority) {
-            add(new EdgeKey(true, bandStart, Math.max(bandStart + 1, bandEnd), color, dashed, priority), y1, y2);
+        void addVertical(float bandStart, float bandEnd, float start, float end, int color, boolean dashed, int priority) {
+            add(new EdgeKey(true, quantiseBand(bandStart), quantiseBand(bandEnd), color, dashed, priority), start, end);
         }
 
-        void addHorizontal(int bandStart, int bandEnd, int x1, int x2, int color, boolean dashed, int priority) {
-            add(new EdgeKey(false, bandStart, Math.max(bandStart + 1, bandEnd), color, dashed, priority), x1, x2);
+        void addHorizontal(float bandStart, float bandEnd, float start, float end, int color, boolean dashed, int priority) {
+            add(new EdgeKey(false, quantiseBand(bandStart), quantiseBand(bandEnd), color, dashed, priority), start, end);
         }
 
-        private void add(EdgeKey key, int start, int end) {
-            if (end <= start) {
+        private void add(EdgeKey key, float start, float end) {
+            if (end <= start || key.bandEnd() <= key.bandStart()) {
                 return;
             }
             segments.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new EdgeSegment(start, end));
         }
 
-        void draw(GuiGraphics graphics) {
-            Set<Long> reservedPixels = new HashSet<>();
+        void draw(BufferBuilder buffer, Matrix4f matrix) {
+            Map<BandKey, List<float[]>> covered = new HashMap<>();
             List<Map.Entry<EdgeKey, List<EdgeSegment>>> entries = new ArrayList<>(segments.entrySet());
             entries.sort(Comparator
                     .<Map.Entry<EdgeKey, List<EdgeSegment>>>comparingInt(entry -> entry.getKey().priority())
@@ -279,68 +361,69 @@ public final class XaeroWorldMapScreenOverlay {
             for (Map.Entry<EdgeKey, List<EdgeSegment>> entry : entries) {
                 EdgeKey key = entry.getKey();
                 List<EdgeSegment> lineSegments = entry.getValue();
-                lineSegments.sort(Comparator.comparingInt(EdgeSegment::start));
-                int mergedStart = Integer.MIN_VALUE;
-                int mergedEnd = Integer.MIN_VALUE;
+                lineSegments.sort(Comparator.comparingDouble(EdgeSegment::start));
+                boolean hasMerged = false;
+                float mergedStart = 0.0F;
+                float mergedEnd = 0.0F;
                 for (EdgeSegment segment : lineSegments) {
-                    if (mergedStart == Integer.MIN_VALUE) {
+                    if (!hasMerged) {
                         mergedStart = segment.start();
                         mergedEnd = segment.end();
-                    } else if (segment.start() <= mergedEnd + 1) {
+                        hasMerged = true;
+                    } else if (segment.start() <= mergedEnd + MERGE_EPSILON) {
                         mergedEnd = Math.max(mergedEnd, segment.end());
                     } else {
-                        drawMerged(graphics, key, mergedStart, mergedEnd, reservedPixels);
+                        drawMerged(buffer, matrix, key, mergedStart, mergedEnd, covered);
                         mergedStart = segment.start();
                         mergedEnd = segment.end();
                     }
                 }
-                if (mergedStart != Integer.MIN_VALUE) {
-                    drawMerged(graphics, key, mergedStart, mergedEnd, reservedPixels);
+                if (hasMerged) {
+                    drawMerged(buffer, matrix, key, mergedStart, mergedEnd, covered);
                 }
             }
         }
 
-        private void drawMerged(GuiGraphics graphics, EdgeKey key, int start, int end, Set<Long> reservedPixels) {
-            if (key.vertical()) {
-                drawVerticalLineAvoiding(graphics, key.bandStart(), key.bandEnd(), start, end, key.color(), key.dashed(), dashPattern, reservedPixels);
-            } else {
-                drawHorizontalLineAvoiding(graphics, key.bandStart(), key.bandEnd(), start, end, key.color(), key.dashed(), dashPattern, reservedPixels);
+        private void drawMerged(BufferBuilder buffer, Matrix4f matrix, EdgeKey key, float start, float end, Map<BandKey, List<float[]>> covered) {
+            float bandStart = key.bandStart() / BAND_QUANTUM;
+            float bandEnd = key.bandEnd() / BAND_QUANTUM;
+            List<float[]> occupied = covered.computeIfAbsent(new BandKey(key.vertical(), key.bandStart(), key.bandEnd()), ignored -> new ArrayList<>());
+            for (float[] span : subtractCovered(start, end, occupied)) {
+                drawSpan(buffer, matrix, key.vertical(), bandStart, bandEnd, span[0], span[1], key.color(), key.dashed(), dashPattern);
             }
+            occupied.add(new float[]{start, end});
         }
     }
 
     private record EdgeKey(boolean vertical, int bandStart, int bandEnd, int color, boolean dashed, int priority) {
     }
 
-    private record EdgeSegment(int start, int end) {
+    private record BandKey(boolean vertical, int bandStart, int bandEnd) {
     }
 
-    private static Rect chunkRect(MapProjection projection, int startChunkX, int startChunkZ, int endChunkX, int endChunkZ) {
-        int x1 = (int) Math.floor(projection.screenCenterX() + (startChunkX * 16.0D - projection.cameraX()) * projection.guiScale());
-        int y1 = (int) Math.floor(projection.screenCenterY() + (startChunkZ * 16.0D - projection.cameraZ()) * projection.guiScale());
-        int x2 = (int) Math.ceil(projection.screenCenterX() + (endChunkX * 16.0D - projection.cameraX()) * projection.guiScale());
-        int y2 = (int) Math.ceil(projection.screenCenterY() + (endChunkZ * 16.0D - projection.cameraZ()) * projection.guiScale());
-        if (x2 <= x1) {
-            x2 = x1 + 1;
-        }
-        if (y2 <= y1) {
-            y2 = y1 + 1;
-        }
-        return new Rect(x1, y1, x2, y2);
+    private record EdgeSegment(float start, float end) {
     }
 
-    private static Rect fillRect(MapProjection projection, int startChunkX, int startChunkZ, int endChunkX, int endChunkZ) {
-        int x1 = (int) Math.floor(projection.screenCenterX() + (startChunkX * 16.0D - projection.cameraX()) * projection.guiScale());
-        int y1 = (int) Math.floor(projection.screenCenterY() + (startChunkZ * 16.0D - projection.cameraZ()) * projection.guiScale());
-        int x2 = (int) Math.floor(projection.screenCenterX() + (endChunkX * 16.0D - projection.cameraX()) * projection.guiScale());
-        int y2 = (int) Math.floor(projection.screenCenterY() + (endChunkZ * 16.0D - projection.cameraZ()) * projection.guiScale());
+    private static FloatRect chunkRect(MapProjection projection, int startChunkX, int startChunkZ, int endChunkX, int endChunkZ) {
+        float x1 = projectX(projection, startChunkX * 16.0D);
+        float y1 = projectY(projection, startChunkZ * 16.0D);
+        float x2 = projectX(projection, endChunkX * 16.0D);
+        float y2 = projectY(projection, endChunkZ * 16.0D);
         if (x2 <= x1) {
-            x2 = x1 + 1;
+            x2 = x1 + 1.0F;
         }
         if (y2 <= y1) {
-            y2 = y1 + 1;
+            y2 = y1 + 1.0F;
         }
-        return new Rect(x1, y1, x2, y2);
+        return new FloatRect(x1, y1, x2, y2);
+    }
+
+    private static float projectX(MapProjection projection, double worldX) {
+        return (float) (projection.screenCenterX() + (worldX - projection.cameraX()) * projection.guiScale());
+    }
+
+    private static float projectY(MapProjection projection, double worldZ) {
+        return (float) (projection.screenCenterY() + (worldZ - projection.cameraZ()) * projection.guiScale());
     }
 
     private static Optional<MapProjection> readProjection(Object screen, int screenWidth, int screenHeight) {
@@ -384,9 +467,9 @@ public final class XaeroWorldMapScreenOverlay {
     private record MapProjection(double cameraX, double cameraZ, double guiScale, double screenCenterX, double screenCenterY) {
     }
 
-    private record Rect(int x1, int y1, int x2, int y2) {
+    private record FloatRect(float x1, float y1, float x2, float y2) {
         boolean intersects(int width, int height) {
-            return x2 > 0 && y2 > 0 && x1 < width && y1 < height;
+            return x2 > 0.0F && y2 > 0.0F && x1 < width && y1 < height;
         }
     }
 }
