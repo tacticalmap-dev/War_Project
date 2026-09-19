@@ -39,7 +39,7 @@
     {
       "content": "思考过程请使用中文呈现",
       "created_at": "2026-09-19T03:27:10.079Z",
-      "updated_at": "2026-09-19T03:27:10.079Z",
+      "updated_at": "2026-09-19T07:15:18.205Z",
       "target": "user",
       "importance": "normal"
     },
@@ -51,9 +51,9 @@
       "importance": "normal"
     },
     {
-      "content": "War Project 资源经济基线（2026-09-19 落地，同日修订为双资源）：node 产出分弹药 ammo 与燃料 fuel 两种，map 模块只存两个「60 秒产出量」（NBT ammo_per_minute / fuel_per_minute；旧的单值键 resource_per_minute 迁移为 ammo）；命令 /warproject node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>，FTB 大地图右键菜单为 Set ammo output / Set fuel output（弹窗提交两项，未修改的一项回传原值）。resource 包以枚举 ResourceKind(ammo|fuel) 为主键，SavedData war_project_resources 每队存 {id, ammo, fuel}，按 Config.resourceSettleIntervalSeconds（默认 5s）分别结算 产出*经过秒数/60，只发给 node 归属且 TeamData 中仍存在的队伍（盟友不分成）；命令 /warproject resource set|add|take <team> <ammo|fuel> <amount>。game end 清空两队资源并把所有 node 重置 neutral，stop 只冻结增量与消耗。网络协议号 \"3\"（C→S SetNodeResourcePacket 携带 ammo+fuel）。",
+      "content": "War Project 资源经济基线（2026-09-19 落地，同日修订为双资源 + 客户端 HUD + 999 硬上限）：node 产出分弹药 ammo 与燃料 fuel（NBT ammo_per_minute / fuel_per_minute，旧键 resource_per_minute 迁移为 ammo），命令 /warproject node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>，FTB 右键菜单 Set ammo output / Set fuel output。resource 包以 ResourceKind(ammo|fuel) 为主键，SavedData war_project_resources 每队 {id, ammo, fuel}，按 Config.resourceSettleIntervalSeconds（默认 5s）分别结算 产出*经过秒数/60，只发给 node 归属且 TeamData 中仍存在的队伍。**两种资源硬上限锁死 999**（ResourceData.MAX_AMOUNT：结算入账 / 管理员 set·add / NBT 读档统一经同一 clamp，旧档超限值读档即压回 999；命令回显实际存量）。game end 清空两队资源并把所有 node 重置 neutral，stop 只冻结增量与消耗。客户端 HUD：client/ResourceClientState + client/ResourceHudOverlay，注册在 VanillaGuiOverlay.HOTBAR 之上，仅 running 且本地玩家有队伍时显示，屏幕正上方居中灵动岛黑胶囊（0xFF000000，左右内边距 8 / 上下 3 / 圆角 = 高度一半），两条「图标 assets/war_project/textures/gui/ammo.png|fuel.png（128×128）+ 当前存量 + '+每60s增量'」。S→C ResourceSyncPacket(running, teams[...]) 在每 5s 结算后、阶段变化后、玩家登录时广播。网络协议号 \"4\"。教训：GuiGraphics 必须用 11 参数重载 blit(rl, x, y, drawW, drawH, uOffset, vOffset, srcW, srcH, texW, texH)（短重载会把绘制尺寸当采样尺寸，导致 128×128 图标只采左上 16×16 透明角），且 mod 类改动必须重启客户端。",
       "created_at": "2026-09-19T03:36:12.062Z",
-      "updated_at": "2026-09-19T05:06:29.379Z",
+      "updated_at": "2026-09-19T07:21:16.821Z",
       "target": "memory",
       "importance": "normal"
     },
@@ -61,6 +61,27 @@
       "content": "War_Project 常有多 agent 并行改动同一仓库：默认在自行执行 gradle 构建（./gradlew build）或把 jar 覆盖同步到 D:\\mc\\.minecraft\\versions\\totalwar\\mods先检查是否有其他agent在工作，以免与其他 agent 的构建/部署冲突，若没有时照常构建并同步。本机 Gradle **daemon 模式会卡死**（daemon 日志停在 “The daemon has started executing the build” 后毫无输出，5-10 分钟无进展、CPU 停滞，杀进程重试仍复现）；改用 `.\\gradlew.bat build --no-daemon --offline` 并在后台作业里用 `*>` 重定向到日志文件，约 40 秒即可 BUILD SUCCESSFUL。",
       "created_at": "2026-09-19T05:06:29.391Z",
       "updated_at": "2026-09-19T05:37:22.522Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "War Project 资源 HUD 规格（2026-09-19 用户定调）：执行 /warproject game start 后，在屏幕正上方中央渲染弹药与燃料图标（assets/war_project/textures/gui/ammo.png、fuel.png），并在图标后标出当前资源量与增加速率；增加速率只需显示 +xx，默认语义为每 60s 增加量。",
+      "created_at": "2026-09-19T06:54:30.069Z",
+      "updated_at": "2026-09-19T06:54:30.069Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "War Project 世界地图 node 标记规格（2026-09-19 用户定调）：node 名称与其资源收益行视为一个整体、垂直居中于 node 几何中心（无收益行时名称自身居中）；收益行在缩放 <2.0x 时完全不渲染（只留名称，初版 2.5x 后由用户改为 2.0x）；图标尺寸与各间距随缩放线性变化，以 5x 为基准（基准值 图标14px / 图标-文字 2 / 两组间 6 / 行间距 2），整体系数 clamp 0.7~2.2，文字保持默认字号。缩放判定值取 Xaero `GuiMap.scale` 字段——它就是界面显示的 “5.16x” 那个数（依据：applyZoomLimits 里 destScale 的区间常量 0.0625/50.0，且把下限改成 1.0 即界面 1x；截图中 1 chunk≈88 物理像素≈5.5px/方块与显示值吻合）。",
+      "created_at": "2026-09-19T07:15:15.106Z",
+      "updated_at": "2026-09-19T07:22:39.783Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "War Project 资源 HUD 视觉规格（2026-09-19 用户定调）：HUD 区域必须画成灵动岛样式的纯黑胶囊背景（PaletteColor 0xFF000000，左右内边距 8、上下内边距 3，高度 = 图标 16 + 6 = 22，圆角半径取 height/2；GuiGraphics.fill 逐行内缩实现真圆角，不用 fill 直角矩形），内容为「ammo 图标 + 存量 + '+每60s速率' ｜ fuel 图标 + 存量 + '+每60s速率'」整体居中于屏幕正上方。",
+      "created_at": "2026-09-19T07:15:18.215Z",
+      "updated_at": "2026-09-19T07:15:18.215Z",
       "target": "memory",
       "importance": "normal"
     }

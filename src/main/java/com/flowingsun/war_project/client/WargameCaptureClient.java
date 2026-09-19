@@ -65,6 +65,7 @@ public final class WargameCaptureClient {
         tickCounter = 0;
         WargameCaptureHudState.reset();
         WargameCaptureNoticeHudState.reset();
+        ResourceClientState.reset();
     }
 
     private static boolean isFriendlyNode(String factionId, String teamId) {

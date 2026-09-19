@@ -33,12 +33,13 @@ public final class ResourceModule implements WarProjectModule {
     }
 
     private void onGamePhaseChanged(MinecraftServer server, GamePhase from, GamePhase to) {
-        if (to != GamePhase.ENDED) {
-            return;
+        if (to == GamePhase.ENDED) {
+            ResourceData data = ResourceData.get(server);
+            int cleared = data.size();
+            data.clearAll();
+            LOGGER.info("War Project game ended: cleared resources for {} team(s)", cleared);
         }
-        ResourceData data = ResourceData.get(server);
-        int cleared = data.size();
-        data.clearAll();
-        LOGGER.info("War Project game ended: cleared resources for {} team(s)", cleared);
+        // Every phase change refreshes the client HUD (it is only visible while RUNNING).
+        ResourceApi.broadcastSync(server);
     }
 }

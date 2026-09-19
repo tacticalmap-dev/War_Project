@@ -18,6 +18,12 @@ import java.util.Set;
 public final class ResourceData extends SavedData {
     private static final String NAME = "war_project_resources";
 
+    /**
+     * Hard ceiling for both resources. It applies to settlement, admin writes and NBT loading, so a
+     * team stockpile can never exceed 999 even if an older save or a datapack said otherwise.
+     */
+    public static final double MAX_AMOUNT = 999.0D;
+
     private final Map<String, Stock> stocks = new LinkedHashMap<>();
 
     public static ResourceData get(MinecraftServer server) {
@@ -129,8 +135,12 @@ public final class ResourceData extends SavedData {
         return Set.copyOf(stocks.keySet());
     }
 
+    /** Clamps an amount into [0, MAX_AMOUNT]; null-safe replacement for a plain bounds check. */
     private static double normalize(double value) {
-        return Double.isFinite(value) && value > 0.0D ? value : 0.0D;
+        if (!Double.isFinite(value) || value <= 0.0D) {
+            return 0.0D;
+        }
+        return Math.min(value, MAX_AMOUNT);
     }
 
     /** Immutable per-team pair of resource amounts. */

@@ -54,6 +54,7 @@ public final class ResourceService {
         double elapsedSeconds = pendingTicks / 20.0D;
         pendingTicks = 0;
         settle(event.getServer(), elapsedSeconds);
+        ResourceApi.broadcastSync(event.getServer());
     }
 
     /**

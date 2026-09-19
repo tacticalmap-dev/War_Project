@@ -27,7 +27,7 @@ import java.util.function.IntPredicate;
 public final class XaeroMinimapOverlay {
     private static final int LABEL_COLOR = 0xFFFFFFFF;
     private static final int LABEL_MAX_LENGTH = 14;
-    private static final float LABEL_SCALE = 1.5F;
+    private static final float LABEL_SCALE = 2.0F;
     private static final double LABEL_EDGE_MARGIN = 10.0D;
     private static Field psField;
     private static Field pcField;

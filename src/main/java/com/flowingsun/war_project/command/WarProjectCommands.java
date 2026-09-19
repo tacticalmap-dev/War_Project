@@ -437,7 +437,8 @@ public final class WarProjectCommands {
                 if (!ResourceApi.set(server, team, kind, amount)) {
                     return fail(context, "Unable to set " + kind.id() + " for team: " + team);
                 }
-                success(context, "Team " + team + " " + kind.id() + " set to " + formatAmount(amount));
+                success(context, "Team " + team + " " + kind.id() + " set to "
+                        + formatAmount(ResourceApi.amount(server, team, kind)));
             }
             case "add" -> {
                 if (!ResourceApi.add(server, team, kind, amount)) {

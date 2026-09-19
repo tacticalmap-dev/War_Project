@@ -10,8 +10,10 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ScreenEvent;
@@ -50,6 +52,31 @@ public final class XaeroWorldMapScreenOverlay {
     private static final int LABEL_COLOR = 0xFFFFFFFF;
     private static final int LABEL_MAX_LENGTH = 16;
     private static final double MIN_GUI_SCALE = 0.015D;
+
+    /**
+     * Resource income row drawn under a node label: an icon followed by "+per 60 seconds", once for
+     * ammo and once for fuel. Texture locations use the vanilla convention of a full
+     * {@code textures/....png} path, the same shape as {@code AbstractWidget.WIDGETS_LOCATION}.
+     */
+    private static final ResourceLocation AMMO_ICON = ResourceLocation.fromNamespaceAndPath(WarProject.MODID, "textures/gui/ammo.png");
+    private static final ResourceLocation FUEL_ICON = ResourceLocation.fromNamespaceAndPath(WarProject.MODID, "textures/gui/fuel.png");
+    private static final int GAIN_ICON_TEXTURE_SIZE = 128;
+    private static final int GAIN_COLOR = 0xFF7CE38B;
+
+    /**
+     * The income row is hidden below this map zoom, using Xaero's {@code scale} field, which is the
+     * same figure the map UI prints as "5.16x". Base sizes are given for {@link #GAIN_ZOOM_BASE} and
+     * then follow the zoom linearly, clamped so the row stays readable when zoomed out and does not
+     * take over the map when zoomed in.
+     */
+    private static final double GAIN_MIN_ZOOM = 2.0D;
+    private static final double GAIN_ZOOM_BASE = 5.0D;
+    private static final double GAIN_MIN_SCALE_FACTOR = 0.7D;
+    private static final double GAIN_MAX_SCALE_FACTOR = 2.2D;
+    private static final int GAIN_ICON_SIZE_BASE = 14;
+    private static final int GAIN_ICON_TEXT_GAP_BASE = 2;
+    private static final int GAIN_ENTRY_GAP_BASE = 6;
+    private static final int GAIN_ROW_GAP_BASE = 2;
 
     /**
      * Edge thickness in logical pixels. Values below 1.0 rely on the rasteriser: at {@code guiScale}
@@ -132,8 +159,84 @@ public final class XaeroWorldMapScreenOverlay {
             }
             int centerX = Math.round((rect.x1() + rect.x2()) * 0.5F);
             int centerY = Math.round((rect.y1() + rect.y2()) * 0.5F);
-            graphics.drawCenteredString(minecraft.font, label, centerX, centerY - 4, LABEL_COLOR);
+            drawNodeLabel(graphics, minecraft.font, node, projection, centerX, centerY);
         }
+    }
+
+    /**
+     * Draws the node's name and, when the map is zoomed in far enough, its resource income, as one
+     * block centred on the node. The icon row follows the map zoom so it keeps its visual weight
+     * against the terrain; below {@link #GAIN_MIN_ZOOM} only the name is drawn.
+     */
+    private static void drawNodeLabel(GuiGraphics graphics, Font font, ClientMapState.ClientNode node, MapProjection projection, int centerX, int centerY) {
+        String label = XaeroWarProjectMapRenderer.label(node.name(), node.id(), LABEL_MAX_LENGTH);
+        if (label.isEmpty()) {
+            return;
+        }
+        long ammoGain = gainAmount(node.ammoPerMinute());
+        long fuelGain = gainAmount(node.fuelPerMinute());
+        boolean showGains = projection.zoom() >= GAIN_MIN_ZOOM && (ammoGain > 0L || fuelGain > 0L);
+        int labelHeight = font.lineHeight;
+        int iconSize = gainSize(GAIN_ICON_SIZE_BASE, projection.zoom());
+        int iconTextGap = gainSize(GAIN_ICON_TEXT_GAP_BASE, projection.zoom());
+        int entryGap = gainSize(GAIN_ENTRY_GAP_BASE, projection.zoom());
+        int rowGap = gainSize(GAIN_ROW_GAP_BASE, projection.zoom());
+        int blockHeight = labelHeight + (showGains ? rowGap + Math.max(iconSize, labelHeight) : 0);
+        int labelTop = Math.round(centerY - blockHeight * 0.5F);
+        graphics.drawCenteredString(font, label, centerX, labelTop, LABEL_COLOR);
+        if (showGains) {
+            drawResourceGains(graphics, font, ammoGain, fuelGain, centerX, labelTop + labelHeight + rowGap, iconSize, iconTextGap, entryGap);
+        }
+    }
+
+    /**
+     * Scales one base size with the map zoom, clamped to the configured factors.
+     */
+    private static int gainSize(int base, double zoom) {
+        double factor = Math.max(GAIN_MIN_SCALE_FACTOR, Math.min(GAIN_MAX_SCALE_FACTOR, zoom / GAIN_ZOOM_BASE));
+        return Math.max(1, (int) Math.round(base * factor));
+    }
+
+    /**
+     * Draws the node's income per 60 seconds under its name: each resource shows its icon followed by
+     * "+amount". A resource the node does not produce is left out.
+     */
+    private static void drawResourceGains(GuiGraphics graphics, Font font, long ammoGain, long fuelGain, int centerX, int rowY, int iconSize, int iconTextGap, int entryGap) {
+        boolean showAmmo = ammoGain > 0L;
+        boolean showFuel = fuelGain > 0L;
+        String ammoText = gainText(ammoGain);
+        String fuelText = gainText(fuelGain);
+        int ammoWidth = showAmmo ? iconSize + iconTextGap + font.width(ammoText) : 0;
+        int fuelWidth = showFuel ? iconSize + iconTextGap + font.width(fuelText) : 0;
+        int rowWidth = ammoWidth + fuelWidth + (showAmmo && showFuel ? entryGap : 0);
+        int x = centerX - rowWidth / 2;
+        if (showAmmo) {
+            drawGain(graphics, font, AMMO_ICON, x, rowY, ammoText, iconSize, iconTextGap);
+            x += ammoWidth + entryGap;
+        }
+        if (showFuel) {
+            drawGain(graphics, font, FUEL_ICON, x, rowY, fuelText, iconSize, iconTextGap);
+        }
+    }
+
+    private static void drawGain(GuiGraphics graphics, Font font, ResourceLocation icon, int x, int y, String text, int iconSize, int iconTextGap) {
+        // The 11-argument overload is required: the shorter ones reuse the target width/height as the
+        // sampled u/v size, which would cut a small corner out of the 128x128 sheet instead of
+        // scaling the whole icon onto the map.
+        graphics.blit(icon, x, y, iconSize, iconSize, 0.0F, 0.0F, GAIN_ICON_TEXTURE_SIZE, GAIN_ICON_TEXTURE_SIZE, GAIN_ICON_TEXTURE_SIZE, GAIN_ICON_TEXTURE_SIZE);
+        graphics.drawString(font, text, x + iconSize + iconTextGap, y + (iconSize - font.lineHeight) / 2, GAIN_COLOR, true);
+    }
+
+    /**
+     * Floors to whole units per 60 seconds, so the printed number is exactly what the row promises
+     * and a node producing less than one unit per minute is not advertised as "+0".
+     */
+    private static long gainAmount(double perMinute) {
+        return (long) Math.floor(Math.max(0.0D, perMinute));
+    }
+
+    private static String gainText(long amount) {
+        return "+" + amount;
     }
 
     private static void drawWarzoneFills(BufferBuilder buffer, Matrix4f matrix, MapProjection projection, int screenWidth, int screenHeight) {
@@ -439,10 +542,13 @@ public final class XaeroWorldMapScreenOverlay {
                 return Optional.empty();
             }
             double mapScale = scaleField.getDouble(screen);
+            // Xaero's scale is both the world-to-pixel factor and the zoom figure the map UI prints
+            // ("5.16x"), so one number drives both the income row's threshold and its size.
             return Optional.of(new MapProjection(
                     cameraXField.getDouble(screen),
                     cameraZField.getDouble(screen),
                     mapScale / screenScale,
+                    mapScale,
                     screenWidth / 2.0D,
                     screenHeight / 2.0D));
         } catch (ReflectiveOperationException | RuntimeException ignored) {
@@ -464,7 +570,7 @@ public final class XaeroWorldMapScreenOverlay {
         throw new NoSuchFieldException(name);
     }
 
-    private record MapProjection(double cameraX, double cameraZ, double guiScale, double screenCenterX, double screenCenterY) {
+    private record MapProjection(double cameraX, double cameraZ, double guiScale, double zoom, double screenCenterX, double screenCenterY) {
     }
 
     private record FloatRect(float x1, float y1, float x2, float y2) {

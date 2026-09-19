@@ -35,6 +35,7 @@ War_Project/
 │  ├─ team/                    # 队伍：TeamData(SavedData), TeamApi, TeamModule, TeamChatService, TeamClientState
 │  ├─ wargame/                 # 占领：WargameModule, WargameService, NodeOccupationService, CaptureProgressQueryApi
 │  ├─ resource/                # 资源经济：ResourceKind, ResourceData(SavedData), ResourceService, ResourceApi, ResourceModule
+│  ├─ client/Resource*.java    # 资源 HUD：ResourceClientState（快照镜像）+ ResourceHudOverlay（顶部 ammo/fuel 条）
 │  ├─ net/                     # WarProjectNetwork：SimpleChannel + 8 个数据包
 │  ├─ command/                 # WarProjectCommands：/warproject 全局指令树（含 game / resource）
 │  ├─ client/                  # ClientMapState, WargameCaptureClient, client/xaero/XaeroWarProjectMapRenderer
@@ -169,10 +170,11 @@ sequenceDiagram
 | | `wargame/CaptureProgressQueryApi` | 只读查询门面，供 `/warproject progress node` 使用。 |
 | | `wargame/WargameModule` | 服务端启动把 `WargameService` 注册到事件总线并订阅游戏阶段，停止时反注册、移除监听并 `clearActive()`。 |
 | 资源经济 | `resource/ResourceKind` | 两种资源的唯一枚举：`AMMO("ammo")` / `FUEL("fuel")`，`parse(String)` 供指令与包解析；非法值不猜测、直接失败。 |
-| | `resource/ResourceData` | `SavedData`（`war_project_resources`）。每队一对存量（`teams[] = {id, ammo, fuel}`；旧档单值键 `amount` 迁移为 ammo），提供 `stock` / `setAmount` / `addAmount` / `addStocks` / `spend` / `clearAll`。**落盘**，重启后存量保留。 |
+| | `resource/ResourceData` | `SavedData`（`war_project_resources`）。每队一对存量（`teams[] = {id, ammo, fuel}`；旧档单值键 `amount` 迁移为 ammo），提供 `stock` / `setAmount` / `addAmount` / `addStocks` / `spend` / `clearAll`。**落盘**，重启后存量保留。两种资源有**硬上限 999**（`ResourceData.MAX_AMOUNT`）：结算入账、管理员 set/add、NBT 读档全部经同一个 clamp，超过 999 的旧档会在读档时被压回 999。 |
 | | `resource/ResourceService` | 挂 Forge 总线，`ServerTickEvent` 累计 tick：阶段非 RUNNING 时清零待结算 tick（不补算），攒满 `intervalTicks = max(1, round(resourceSettleIntervalSeconds * 20))` 后按真实经过秒数分别结算 `ammoPerMinute * elapsedSeconds / 60` 与 `fuelPerMinute * elapsedSeconds / 60`，只发给 node 归属且在 `TeamData` 中仍存在的队伍（盟友不分成）。 |
-| | `resource/ResourceApi` | 服务端门面：`stock` / `stocks`（只列现存队伍）/ `set` / `add`（管理员，任意阶段）/ `spend(kind)`（消耗，仅 RUNNING）。 |
-| | `resource/ResourceModule` | 注册服务与阶段监听；收到 `ENDED` 时清空所有队伍资源（两种一起）。 |
+| | `resource/ResourceApi` | 服务端门面：`stock` / `stocks`（只列现存队伍）/ `set` / `add`（管理员，任意阶段，写入同样受 999 上限夹紧）/ `spend(kind)`（消耗，仅 RUNNING）。 |
+| | `resource/ResourceModule` | 注册服务与阶段监听；收到 `ENDED` 时清空所有队伍资源（两种一起），并在任何阶段变化后广播一次资源快照（HUD 显隐与刷新）。 |
+| 资源 HUD | `client/ResourceClientState` + `client/ResourceHudOverlay` | 服务端 `ResourceSyncPacket` 的客户端镜像；HUD 注册在 `VanillaGuiOverlay.HOTBAR` 之上，只在 `running=true` 且本地玩家属于某队时显示：屏幕正上方居中，两条「图标 + 当前量 + `+每60s增量`」（图标 `assets/war_project/textures/gui/ammo.png` / `fuel.png`，128×128 缩放到 16×16；速率为该队全部归属 node 的 60s 产出之和，0 时用灰色）。 |
 | | `map/MapData#setNodeResourceOutputs` | mapdevide 侧只存「该 node 60 秒的弹药与燃料产出量」两个数值（NBT `ammo_per_minute` / `fuel_per_minute`；旧的单值键 `resource_per_minute` 迁移为 ammo），结算不在这里发生；`resetAllNodeFactions()` 供 `ENDED` 把全部 node 及其 warzone 重置为 neutral。 |
 
 #### e33chat 可选集成（队伍 / 同盟 → 群组）
@@ -185,16 +187,16 @@ sequenceDiagram
 
 | 模块 | 职责 |
 | --- | --- |
-| `net/WarProjectNetwork` | 单例 `SimpleChannel`（`war_project:main`，协议号 `3`）。注册 8 类包：**S→C** `MapSyncPacket`、`TeamSyncPacket`、`CaptureProgressPacket`、`CaptureNoticePacket`；**C→S** `CaptureIntentPacket`、`CreateNodeWarzonePacket`、`EditMapObjectPacket`、`SetNodeResourcePacket`。写地图的 C→S 包（含 `SetNodeResourcePacket`）都在服务端做 **OP 2 级权限校验**。所有 payload 都是 NBT `CompoundTag` 或长整型集合，客户端侧用 `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, ...)` 隔离。资源存量本身不广播（只在服务端命令里可读）。 |
+| `net/WarProjectNetwork` | 单例 `SimpleChannel`（`war_project:main`，协议号 `4`）。注册 9 类包：**S→C** `MapSyncPacket`、`TeamSyncPacket`、`CaptureProgressPacket`、`CaptureNoticePacket`、`ResourceSyncPacket`；**C→S** `CaptureIntentPacket`、`CreateNodeWarzonePacket`、`EditMapObjectPacket`、`SetNodeResourcePacket`。写地图的 C→S 包（含 `SetNodeResourcePacket`）都在服务端做 **OP 2 级权限校验**。所有 payload 都是 NBT `CompoundTag` 或长整型集合，客户端侧用 `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, ...)` 隔离。资源通过 `ResourceSyncPacket` 广播：每队存量 + 该队每 60s 速率（每 5s 结算后、阶段变化后、玩家登录时各推一次）。 |
 
 ### 指令与客户端
 
 | 模块 | 文件 | 职责 |
 | --- | --- | --- |
-| 指令树 | `command/WarProjectCommands` | `/warproject`（需 OP 2 级），**全局命令树，唯一注册点**（`TeamModule.onRegisterCommands` 调 `WarProjectCommands.register`）。子命令：`chunk info`、`map set`、`node list/info/setfaction/rename/delete`、`node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>`、`warzone list/info/node`、`progress node`、`game start|stop|end|status`、`resource list/team`、`resource set|add|take <team> <ammo|fuel> <amount>`、`team add/remove/empty/join/leave/list/msg switch/admin set|remove/modify/ally`。补全来自 `MapDivideStateApi` 与 `TeamData`。node 与战区只能成对存在，因此删除入口只有 `node delete`，它连带删掉该 node 绑定的战区；没有独立的战区删除指令；战区阵营也一律由 `node setfaction` 下发（`warzone setfaction` 已取消），两者立场不会互相矛盾。 |
+| 指令树 | `command/WarProjectCommands` | `/warproject`（需 OP 2 级），**全局命令树，唯一注册点**（`TeamModule.onRegisterCommands` 调 `WarProjectCommands.register`）。子命令：`chunk info`、`map set`、`node list/info/setfaction/rename/delete`、`node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>`、`warzone list/info/node`、`progress node`、`game start|stop|end|status`、`resource list/team`、`resource set|add|take <team> <ammo|fuel> <amount>`（正数写入被夹到上限 999，回显为实际存量）、`team add/remove/empty/join/leave/list/msg switch/admin set|remove/modify/ally`。补全来自 `MapDivideStateApi` 与 `TeamData`。node 与战区只能成对存在，因此删除入口只有 `node delete`，它连带删掉该 node 绑定的战区；没有独立的战区删除指令；战区阵营也一律由 `node setfaction` 下发（`warzone setfaction` 已取消），两者立场不会互相矛盾。 |
 | 指令归属 | `/warproject game ...` | **全局指令，不属于任何模块**：它只调用 `module/GameStateService`；`resource` 与 `wargame` 各自订阅阶段变化并在自己的包里反应（资源清空、node 重置）。 |
 | 客户端占领探测 | `client/WargameCaptureClient` | 每 20 tick 检查本地玩家所在区块是否属于「非本方且非同盟」的节点；是则发 `CaptureIntentPacket`。同时接收进度回包存到 `lastNodeId/lastProgress`（预留 HUD 接口，目前无消费方）。 |
-| 客户端状态镜像 | `client/ClientMapState`、`team/TeamClientState` | 保存服务端下发的 NBT 快照并提供 `version` 版本号，作为渲染层的失效判据与查询源。 |
+| 客户端状态镜像 | `client/ClientMapState`、`client/ResourceClientState`、`team/TeamClientState` | 保存服务端下发的 NBT / 资源快照并提供 `version` 版本号，作为渲染层的失效判据与查询源。 |
 | 渲染计算 | `client/xaero/XaeroWarProjectMapRenderer` | 与具体地图模组无关的纯计算层：按「本方/同盟=蓝、敌对=红、中立=白」解析阵营配色；战区做半透明填充 + 虚线边、节点做实线边，只在区域外边界描边；`regionHash` 把地图版本、队伍版本、区块归属、阵营关系混合成一个哈希，供地图模组做重绘缓存键。 |
 | 可选兼容 | `src/optionalXaero`（9 文件） | `XaeroWorldMapSessionMixin` / `XaeroMinimapSessionMixin` 用 `@Redirect` 挂进 Xaero 的 `HighlighterRegistry.end()` 完成注册；`XaeroCommonMinimapRendererMixin` 在小地图渲染前绘制叠加层；`XaeroWorldMapScreenOverlay` 通过 `ScreenEvent.Render.Post` 反射读相机/缩放字段直接绘制战区与节点边框。 |
 | 可选兼容 | `src/optionalFtb`（1 文件） | `FtbChunksMapDivideClient`：在 FTB Chunks 大地图上提供工具栏与拖拽选区，两阶段「选节点区块 → 命名 → 选战区区块 → 确认」，发 `CreateNodeWarzonePacket`；前置校验（战区须包含全部节点区块、至少一个非节点区块）在客户端先提示，服务端再兜底校验。 |
@@ -209,7 +211,7 @@ sequenceDiagram
 4. **占领闭环**（客户端每 20 tick 探测 + 服务端每 20 tick 结算）：意图包 → 服务端复核 → 人数领先方推进度 → 进度回包驱动客户端显示 → 50% 中立化 → 满值改阵营 → `broadcastMap` → 所有客户端 `ClientMapState.replace` → 渲染层按帧重绘叠加。
 5. **建设闭环**（OP）：FTB 大地图拖拽选区 → 提交 → 服务端权限与重叠校验 → `MapData.saveNodeWithWarzone` → 广播。
 6. **游戏生命周期**（OP，全局）：`/warproject game start|stop|end` → `GameStateService.transition` 改阶段并同步通知订阅者：`resource` 在 ENDED 清空全部队伍资源，`wargame` 在 ENDED 把全部 node 重置为 neutral 并清空占领进度与意图；STOPPED 只冻结（占领进度、资源存量、node 归属都保留）。阶段不落盘，开服一律 STOPPED。
-7. **资源结算闭环**：`resource` 每 `resourceSettleIntervalSeconds`（默认 5s）结算一次，遍历 node：归属为真实队伍且弹药/燃料产出有值时，按「产出 * 经过秒数 / 60」分别计入该队伍的 ammo 与 fuel；`/warproject resource ...` 与 FTB 右键菜单（Set ammo output / Set fuel output）可查看与调整。
+7. **资源结算闭环**：`resource` 每 `resourceSettleIntervalSeconds`（默认 5s）结算一次，遍历 node：归属为真实队伍且弹药/燃料产出有值时，按「产出 * 经过秒数 / 60」分别计入该队伍的 ammo 与 fuel（每项夹在上限 999 之内）；`/warproject resource ...` 与 FTB 右键菜单（Set ammo output / Set fuel output）可查看与调整；每次结算后广播 `ResourceSyncPacket`，客户端顶部 HUD 据此刷新存量与 `+每60s速率`。
 8. **管理闭环**（OP）：`/warproject` 读写 `MapData` / `TeamData` / `ResourceData`，写成功即广播对应快照。
 
 ---

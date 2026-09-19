@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 public final class WarProjectNetwork {
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
     private static int packetId;
     private static SimpleChannel channel;
 
@@ -87,6 +87,11 @@ public final class WarProjectNetwork {
                 .encoder(SetNodeResourcePacket::encode)
                 .decoder(SetNodeResourcePacket::decode)
                 .consumerMainThread(SetNodeResourcePacket::handle)
+                .add();
+        channel.messageBuilder(ResourceSyncPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ResourceSyncPacket::encode)
+                .decoder(ResourceSyncPacket::decode)
+                .consumerMainThread(ResourceSyncPacket::handle)
                 .add();
     }
 
@@ -156,6 +161,18 @@ public final class WarProjectNetwork {
         }
     }
 
+    public static void sendResources(ServerPlayer player, ResourceSyncPacket packet) {
+        if (channel != null) {
+            channel.send(PacketDistributor.PLAYER.with(() -> player), packet);
+        }
+    }
+
+    public static void broadcastResources(ResourceSyncPacket packet) {
+        if (channel != null) {
+            channel.send(PacketDistributor.ALL.noArg(), packet);
+        }
+    }
+
     public static void sendNodeResources(String nodeId, double ammoPerMinute, double fuelPerMinute) {
         if (channel != null) {
             channel.sendToServer(new SetNodeResourcePacket(nodeId, ammoPerMinute, fuelPerMinute));
@@ -196,6 +213,43 @@ public final class WarProjectNetwork {
             context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> TeamClientState.replace(packet.snapshot)));
             context.get().setPacketHandled(true);
         }
+    }
+
+    /**
+     * S→C resource snapshot: whether the game is RUNNING plus, for every existing team, both
+     * stockpiles and the per-60s income contributed by that team's nodes.
+     */
+    public record ResourceSyncPacket(boolean running, List<ResourceTeamEntry> teams) {
+        static void encode(ResourceSyncPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeBoolean(packet.running);
+            buffer.writeVarInt(packet.teams.size());
+            for (ResourceTeamEntry entry : packet.teams) {
+                buffer.writeUtf(entry.teamId(), 64);
+                buffer.writeDouble(entry.ammo());
+                buffer.writeDouble(entry.fuel());
+                buffer.writeDouble(entry.ammoPerMinute());
+                buffer.writeDouble(entry.fuelPerMinute());
+            }
+        }
+
+        static ResourceSyncPacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            boolean running = buffer.readBoolean();
+            int count = buffer.readVarInt();
+            List<ResourceTeamEntry> teams = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                teams.add(new ResourceTeamEntry(buffer.readUtf(64), buffer.readDouble(), buffer.readDouble(),
+                        buffer.readDouble(), buffer.readDouble()));
+            }
+            return new ResourceSyncPacket(running, List.copyOf(teams));
+        }
+
+        static void handle(ResourceSyncPacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> com.flowingsun.war_project.client.ResourceClientState.replace(packet)));
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    public record ResourceTeamEntry(String teamId, double ammo, double fuel, double ammoPerMinute, double fuelPerMinute) {
     }
 
     public record CaptureIntentPacket(String nodeId) {
