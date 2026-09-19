@@ -30,6 +30,8 @@ public final class ClientMapState {
                     tag.getString("name"),
                     tag.getString("faction_id"),
                     tag.getInt("color_rgb"),
+                    tag.getDouble("ammo_per_minute"),
+                    tag.getDouble("fuel_per_minute"),
                     readChunks(tag)
             ));
         }
@@ -74,7 +76,8 @@ public final class ClientMapState {
         return chunks;
     }
 
-    public record ClientNode(String id, String name, String factionId, int colorRgb, Set<Long> chunks) {
+    public record ClientNode(String id, String name, String factionId, int colorRgb,
+                             double ammoPerMinute, double fuelPerMinute, Set<Long> chunks) {
     }
 
     public record ClientWarzone(String id, String nodeId, String factionId, int colorRgb, Set<Long> chunks) {

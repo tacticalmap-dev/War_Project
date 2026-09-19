@@ -1,6 +1,8 @@
 package com.flowingsun.war_project.wargame;
 
 import com.flowingsun.war_project.Config;
+import com.flowingsun.war_project.module.GamePhase;
+import com.flowingsun.war_project.module.GameStateService;
 import com.flowingsun.war_project.map.MapData;
 import com.flowingsun.war_project.map.MapDivideStateApi;
 import com.flowingsun.war_project.net.WarProjectNetwork;
@@ -45,7 +47,7 @@ public final class WargameService {
 
     public void submitCaptureIntent(ServerPlayer player, String nodeId) {
         MinecraftServer server = player.getServer();
-        if (server == null || nodeId == null || nodeId.isBlank()) {
+        if (server == null || nodeId == null || nodeId.isBlank() || !GameStateService.active().isRunning()) {
             return;
         }
         MapData.get(server).node(nodeId).ifPresent(node -> {
@@ -60,11 +62,28 @@ public final class WargameService {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
+        if (!GameStateService.active().isRunning()) {
+            return;
+        }
         if (++tickCounter < 20) {
             return;
         }
         tickCounter = 0;
         tick(event.getServer());
+    }
+
+    /**
+     * ENDED clears the whole board: every node goes back to neutral and all capture progress is
+     * dropped. STOPPED only freezes the loop above, keeping progress and ownership.
+     */
+    public void onGamePhaseChanged(MinecraftServer server, GamePhase from, GamePhase to) {
+        if (to != GamePhase.ENDED) {
+            return;
+        }
+        int resetNodes = MapDivideStateApi.resetAllNodeFactions(server);
+        int clearedProgress = NodeOccupationService.clearAll();
+        intents.clear();
+        LOGGER.info("War Project game ended: reset {} node(s), cleared {} capture progress entry(ies)", resetNodes, clearedProgress);
     }
 
     private void tick(MinecraftServer server) {

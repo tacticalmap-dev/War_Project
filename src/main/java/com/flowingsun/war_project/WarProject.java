@@ -1,9 +1,11 @@
 package com.flowingsun.war_project;
 
 import com.flowingsun.war_project.map.MapDivideModule;
+import com.flowingsun.war_project.module.GameStateService;
 import com.flowingsun.war_project.module.ModuleRegistry;
 import com.flowingsun.war_project.module.WarProjectModule;
 import com.flowingsun.war_project.net.WarProjectNetwork;
+import com.flowingsun.war_project.resource.ResourceModule;
 import com.flowingsun.war_project.team.TeamModule;
 import com.flowingsun.war_project.wargame.WargameModule;
 import com.mojang.logging.LogUtils;
@@ -37,6 +39,7 @@ public class WarProject {
         List<WarProjectModule> modules = List.of(
                 new MapDivideModule(),
                 new TeamModule(),
+                new ResourceModule(),
                 new WargameModule()
         );
         this.moduleRegistry = new ModuleRegistry(modules);
@@ -56,11 +59,14 @@ public class WarProject {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         moduleRegistry.onServerStarting(event.getServer());
+        // The game phase is a global kernel: it is never persisted and every server start is STOPPED.
+        GameStateService.active().reset();
     }
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         moduleRegistry.onServerStopping(event.getServer());
+        GameStateService.clearActive();
     }
 
     @SubscribeEvent

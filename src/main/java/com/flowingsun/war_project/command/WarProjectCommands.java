@@ -1,13 +1,20 @@
 package com.flowingsun.war_project.command;
 
+import com.flowingsun.war_project.Config;
 import com.flowingsun.war_project.map.MapData;
 import com.flowingsun.war_project.map.MapDivideStateApi;
+import com.flowingsun.war_project.module.GamePhase;
+import com.flowingsun.war_project.module.GameStateService;
 import com.flowingsun.war_project.net.WarProjectNetwork;
+import com.flowingsun.war_project.resource.ResourceApi;
+import com.flowingsun.war_project.resource.ResourceData;
+import com.flowingsun.war_project.resource.ResourceKind;
 import com.flowingsun.war_project.team.TeamApi;
 import com.flowingsun.war_project.team.TeamData;
 import com.flowingsun.war_project.team.TeamModule;
 import com.flowingsun.war_project.wargame.CaptureProgressQueryApi;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -26,6 +33,7 @@ import net.minecraft.world.level.ChunkPos;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -54,6 +62,8 @@ public final class WarProjectCommands {
                 .then(nodeCommands())
                 .then(warzoneCommands())
                 .then(progressCommands())
+                .then(gameCommands())
+                .then(resourceCommands())
                 .then(teamCommands()));
     }
 
@@ -89,6 +99,12 @@ public final class WarProjectCommands {
                                 .then(Commands.argument("newNodeId", StringArgumentType.word())
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                                 .executes(WarProjectCommands::nodeRename)))))
+                .then(Commands.literal("setresource")
+                        .then(Commands.argument("nodeId", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
+                                .then(Commands.argument("ammoPerMinute", DoubleArgumentType.doubleArg(0.0D))
+                                        .then(Commands.argument("fuelPerMinute", DoubleArgumentType.doubleArg(0.0D))
+                                                .executes(WarProjectCommands::nodeSetResource)))))
                 .then(Commands.literal("delete")
                         .then(Commands.argument("nodeId", StringArgumentType.word())
                                 .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
@@ -105,17 +121,9 @@ public final class WarProjectCommands {
                 .then(Commands.literal("node")
                         .then(Commands.argument("nodeId", StringArgumentType.word())
                                 .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
-                                .executes(WarProjectCommands::warzoneForNode)))
-                .then(Commands.literal("setfaction")
-                        .then(Commands.argument("warzoneId", StringArgumentType.word())
-                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllWarzoneIds(server(context)), builder))
-                                .then(Commands.argument("faction", StringArgumentType.word())
-                                        .suggests(WarProjectCommands::suggestFactions)
-                                        .executes(WarProjectCommands::warzoneSetFaction))))
-                .then(Commands.literal("delete")
-                        .then(Commands.argument("warzoneId", StringArgumentType.word())
-                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllWarzoneIds(server(context)), builder))
-                                .executes(WarProjectCommands::warzoneDelete)));
+                                .executes(WarProjectCommands::warzoneForNode)));
+        // Deliberately no setfaction: a warzone's faction always follows the node it is bound to, so
+        // /warproject node setfaction is the only place ownership can change.
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> progressCommands() {
@@ -124,6 +132,44 @@ public final class WarProjectCommands {
                         .then(Commands.argument("nodeId", StringArgumentType.word())
                                 .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
                                 .executes(WarProjectCommands::progressNode)));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> gameCommands() {
+        return Commands.literal("game")
+                .then(Commands.literal("start").executes(context -> gameTransition(context, GamePhase.RUNNING)))
+                .then(Commands.literal("stop").executes(context -> gameTransition(context, GamePhase.STOPPED)))
+                .then(Commands.literal("end").executes(context -> gameTransition(context, GamePhase.ENDED)))
+                .then(Commands.literal("status").executes(WarProjectCommands::gameStatus));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> resourceCommands() {
+        return Commands.literal("resource")
+                .then(Commands.literal("list").executes(WarProjectCommands::resourceList))
+                .then(Commands.literal("team")
+                        .then(Commands.argument("team", StringArgumentType.word())
+                                .suggests(WarProjectCommands::suggestTeams)
+                                .executes(WarProjectCommands::resourceTeam)))
+                .then(resourceModifyCommands("set"))
+                .then(resourceModifyCommands("add"))
+                .then(resourceModifyCommands("take"));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> resourceModifyCommands(String action) {
+        return Commands.literal(action)
+                .then(Commands.argument("team", StringArgumentType.word())
+                        .suggests(WarProjectCommands::suggestTeams)
+                        .then(Commands.argument("kind", StringArgumentType.word())
+                                .suggests(WarProjectCommands::suggestResourceKinds)
+                                .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(context -> resourceModify(context, action)))));
+    }
+
+    private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestResourceKinds(CommandContext<CommandSourceStack> context, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        java.util.List<String> ids = new ArrayList<>();
+        for (ResourceKind kind : ResourceKind.values()) {
+            ids.add(kind.id());
+        }
+        return SharedSuggestionProvider.suggest(ids, builder);
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> teamCommands() {
@@ -258,7 +304,8 @@ public final class WarProjectCommands {
             return fail(context, "Node not found: " + nodeId);
         }
         WarProjectNetwork.broadcastMap(server(context));
-        success(context, "Node deleted: " + nodeId);
+        com.flowingsun.war_project.wargame.NodeOccupationService.clear(nodeId);
+        success(context, "Node deleted: " + nodeId + " (its warzone was removed too)");
         return 1;
     }
 
@@ -288,29 +335,6 @@ public final class WarProjectCommands {
         return 1;
     }
 
-    private static int warzoneSetFaction(CommandContext<CommandSourceStack> context) {
-        String warzoneId = StringArgumentType.getString(context, "warzoneId");
-        String faction = StringArgumentType.getString(context, "faction");
-        if (!TeamApi.isValidFaction(server(context), faction)) {
-            return fail(context, "Faction/team not found: " + faction);
-        }
-        if (!MapDivideStateApi.setWarzoneFaction(server(context), warzoneId, faction)) {
-            return fail(context, "Warzone not found: " + warzoneId);
-        }
-        success(context, "Warzone faction updated: " + warzoneId + " -> " + faction);
-        return 1;
-    }
-
-    private static int warzoneDelete(CommandContext<CommandSourceStack> context) {
-        String warzoneId = StringArgumentType.getString(context, "warzoneId");
-        if (!MapData.get(server(context)).deleteWarzone(warzoneId)) {
-            return fail(context, "Warzone not found: " + warzoneId);
-        }
-        WarProjectNetwork.broadcastMap(server(context));
-        success(context, "Warzone deleted: " + warzoneId);
-        return 1;
-    }
-
     private static int progressNode(CommandContext<CommandSourceStack> context) {
         String nodeId = StringArgumentType.getString(context, "nodeId");
         if (MapData.get(server(context)).node(nodeId).isEmpty()) {
@@ -323,6 +347,132 @@ public final class WarProjectCommands {
                 + " / " + String.format(java.util.Locale.ROOT, "%.2f", snapshot.requiredSeconds())
                 + " neutralized=" + snapshot.neutralized();
         context.getSource().sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int gameTransition(CommandContext<CommandSourceStack> context, GamePhase target) {
+        CommandSourceStack source = context.getSource();
+        MinecraftServer server = source.getServer();
+        GameStateService.Transition transition = GameStateService.active().transition(server, target);
+        if (!transition.changed()) {
+            source.sendSuccess(() -> Component.literal("War Project game is already " + transition.to().id() + "."), false);
+            return 0;
+        }
+        Component message = Component.literal(switch (transition.to()) {
+            case RUNNING -> "War Project game started: node capture and resource income are now active.";
+            case STOPPED -> "War Project game stopped: node capture and resource income are paused.";
+            case ENDED -> "War Project game ended: team resources were cleared and all nodes were reset to neutral.";
+        });
+        server.getPlayerList().broadcastSystemMessage(message, false);
+        if (!(source.getEntity() instanceof ServerPlayer)) {
+            source.sendSuccess(() -> message, false);
+        }
+        return 1;
+    }
+
+    private static int gameStatus(CommandContext<CommandSourceStack> context) {
+        MinecraftServer server = server(context);
+        GamePhase phase = GameStateService.active().phase();
+        Map<String, ResourceData.Stock> stocks = ResourceApi.stocks(server);
+        int nodesWithOutput = 0;
+        for (MapData.Node node : MapData.get(server).nodes()) {
+            if (MapData.isFaction(node.factionId())
+                    && (node.ammoPerMinute() > 0.0D || node.fuelPerMinute() > 0.0D)) {
+                nodesWithOutput++;
+            }
+        }
+        double ammo = 0.0D;
+        double fuel = 0.0D;
+        for (ResourceData.Stock stock : stocks.values()) {
+            ammo += stock.ammo();
+            fuel += stock.fuel();
+        }
+        String message = String.format(java.util.Locale.ROOT,
+                "Game phase=%s settleInterval=%.2fs teams=%d nodesWithOutput=%d ammo=%.2f fuel=%.2f",
+                phase.id(), Config.resourceSettleIntervalSeconds, stocks.size(), nodesWithOutput, ammo, fuel);
+        context.getSource().sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int resourceList(CommandContext<CommandSourceStack> context) {
+        Map<String, ResourceData.Stock> stocks = ResourceApi.stocks(server(context));
+        if (stocks.isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.literal("No teams."), false);
+            return 0;
+        }
+        String joined = stocks.entrySet().stream()
+                .map(entry -> entry.getKey() + "(ammo=" + formatAmount(entry.getValue().ammo())
+                        + ", fuel=" + formatAmount(entry.getValue().fuel()) + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
+        context.getSource().sendSuccess(() -> Component.literal("Resources: " + joined), false);
+        return stocks.size();
+    }
+
+    private static int resourceTeam(CommandContext<CommandSourceStack> context) {
+        String team = StringArgumentType.getString(context, "team");
+        if (!ResourceApi.teamExists(server(context), team)) {
+            return fail(context, "Team not found: " + team);
+        }
+        ResourceData.Stock stock = ResourceApi.stock(server(context), team);
+        context.getSource().sendSuccess(() -> Component.literal("Team " + team + " resources: ammo="
+                + formatAmount(stock.ammo()) + ", fuel=" + formatAmount(stock.fuel())), false);
+        return 1;
+    }
+
+    private static int resourceModify(CommandContext<CommandSourceStack> context, String action) {
+        String team = StringArgumentType.getString(context, "team");
+        String rawKind = StringArgumentType.getString(context, "kind");
+        double amount = DoubleArgumentType.getDouble(context, "amount");
+        Optional<ResourceKind> parsedKind = ResourceKind.parse(rawKind);
+        if (parsedKind.isEmpty()) {
+            return fail(context, "Unknown resource kind: " + rawKind + " (expected ammo or fuel)");
+        }
+        ResourceKind kind = parsedKind.get();
+        MinecraftServer server = server(context);
+        if (!ResourceApi.teamExists(server, team)) {
+            return fail(context, "Team not found: " + team);
+        }
+        switch (action) {
+            case "set" -> {
+                if (!ResourceApi.set(server, team, kind, amount)) {
+                    return fail(context, "Unable to set " + kind.id() + " for team: " + team);
+                }
+                success(context, "Team " + team + " " + kind.id() + " set to " + formatAmount(amount));
+            }
+            case "add" -> {
+                if (!ResourceApi.add(server, team, kind, amount)) {
+                    return fail(context, "Unable to add " + kind.id() + " for team: " + team);
+                }
+                success(context, "Team " + team + " " + kind.id() + ": "
+                        + formatAmount(ResourceApi.amount(server, team, kind)));
+            }
+            case "take" -> {
+                if (!GameStateService.active().isRunning()) {
+                    return fail(context, "Resource consumption is paused while the game is "
+                            + GameStateService.active().phase().id() + ".");
+                }
+                if (!ResourceApi.spend(server, team, kind, amount)) {
+                    return fail(context, "Not enough " + kind.id() + " for team: " + team);
+                }
+                success(context, "Team " + team + " " + kind.id() + ": "
+                        + formatAmount(ResourceApi.amount(server, team, kind)));
+            }
+            default -> {
+                return fail(context, "Unknown resource action: " + action);
+            }
+        }
+        return 1;
+    }
+
+    private static int nodeSetResource(CommandContext<CommandSourceStack> context) {
+        String nodeId = StringArgumentType.getString(context, "nodeId");
+        double ammoPerMinute = DoubleArgumentType.getDouble(context, "ammoPerMinute");
+        double fuelPerMinute = DoubleArgumentType.getDouble(context, "fuelPerMinute");
+        if (!MapDivideStateApi.setNodeResourceOutputs(server(context), nodeId, ammoPerMinute, fuelPerMinute)) {
+            return fail(context, "Node not found: " + nodeId);
+        }
+        success(context, "Node resource output set: " + nodeId
+                + " -> ammo=" + formatAmount(ammoPerMinute) + "/60s fuel=" + formatAmount(fuelPerMinute) + "/60s");
         return 1;
     }
 
@@ -511,11 +661,17 @@ public final class WarProjectCommands {
         return SharedSuggestionProvider.suggest(ids, builder);
     }
 
+    private static String formatAmount(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
     private static String formatNode(CompoundTag tag) {
         return "Node " + tag.getString("id")
                 + " name=" + tag.getString("name")
                 + " faction=" + tag.getString("faction_id")
-                + " chunks=" + tag.getList("chunks", Tag.TAG_COMPOUND).size();
+                + " chunks=" + tag.getList("chunks", Tag.TAG_COMPOUND).size()
+                + " ammoPerMinute=" + formatAmount(tag.getDouble("ammo_per_minute"))
+                + " fuelPerMinute=" + formatAmount(tag.getDouble("fuel_per_minute"));
     }
 
     private static String formatWarzone(CompoundTag tag) {

@@ -255,7 +255,11 @@ public final class FtbChunksMapDivideClient {
         largeMap.openContextMenu(java.util.List.of(
                 dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Node: " + displayName(target.name(), target.id()))),
                 dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("ID: " + target.id() + "  chunks: " + target.chunks().size())),
+                dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Ammo: " + formatAmount(target.ammoPerMinute()) + " / 60s")),
+                dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Fuel: " + formatAmount(target.fuelPerMinute()) + " / 60s")),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Edit node"), Icons.ACCEPT, button -> openRenameNodePrompt(largeMap, target)),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Set ammo output"), Icons.ACCEPT, button -> openResourcePrompt(largeMap, target, true)),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Set fuel output"), Icons.ACCEPT, button -> openResourcePrompt(largeMap, target, false)),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Delete node"), Icons.REMOVE, button -> WarProjectNetwork.sendDeleteNode(target.id())),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Cancel"), Icons.CANCEL, button -> {
                 })
@@ -279,6 +283,34 @@ public final class FtbChunksMapDivideClient {
             overlay.setExtraZlevel(INPUT_MODAL_Z);
             screen.getGui().pushModalPanel(overlay);
         });
+    }
+
+    /**
+     * Reopens the numeric prompt prefilled with one of the node's 60s outputs. Confirming resends
+     * both values (the untouched one unchanged), so the server always stores a complete pair.
+     */
+    private static void openResourcePrompt(LargeMapScreen screen, ClientMapState.ClientNode node, boolean ammo) {
+        String label = ammo ? "Ammo per 60s" : "Fuel per 60s";
+        String current = formatAmount(ammo ? node.ammoPerMinute() : node.fuelPerMinute());
+        schedulePrompt(() -> {
+            AmountPromptOverlay overlay = new AmountPromptOverlay(screen.getGui(),
+                    Component.literal(ammo ? "Node Ammo Output" : "Node Fuel Output"), label, current, (accepted, value) -> {
+                        if (!accepted) {
+                            return;
+                        }
+                        if (ammo) {
+                            WarProjectNetwork.sendNodeResources(node.id(), value, node.fuelPerMinute());
+                        } else {
+                            WarProjectNetwork.sendNodeResources(node.id(), node.ammoPerMinute(), value);
+                        }
+                    }).atMousePosition();
+            overlay.setExtraZlevel(INPUT_MODAL_Z);
+            screen.getGui().pushModalPanel(overlay);
+        });
+    }
+
+    private static String formatAmount(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 
     private static Optional<ClientMapState.ClientNode> nodeAtChunk(long chunkKey) {
@@ -492,6 +524,11 @@ public final class FtbChunksMapDivideClient {
         void accept(boolean accepted, String name, String id);
     }
 
+    @FunctionalInterface
+    private interface AmountCallback {
+        void accept(boolean accepted, double value);
+    }
+
     private record PendingNode(String id, String name, Set<Long> nodeChunks, int colorRgb) {
     }
 
@@ -590,6 +627,101 @@ public final class FtbChunksMapDivideClient {
             double py = panelY + (regionZ - regionMinZ) * tileSize - scrollY;
             int size = Math.max(2, (int) Math.ceil(tileSize / 32.0D));
             return new Rect((int) Math.floor(px), (int) Math.floor(py), (int) Math.ceil(px) + size, (int) Math.ceil(py) + size);
+        }
+    }
+
+    private static final class AmountPromptOverlay extends ModalPanel {
+        private static final int WIDTH = 190;
+        private static final int HEIGHT = 92;
+        private final Component title;
+        private final String label;
+        private final AmountCallback callback;
+        private final TextBox amountBox;
+        private SimpleTextButton acceptButton;
+        private SimpleTextButton cancelButton;
+        private boolean closed;
+        private String error = "";
+
+        private AmountPromptOverlay(Panel parent, Component title, String label, String fallback, AmountCallback callback) {
+            super(parent);
+            this.title = title;
+            this.label = label;
+            this.callback = callback;
+            setSize(WIDTH, HEIGHT);
+            amountBox = new TextBox(this);
+            amountBox.setMaxLength(32);
+            amountBox.setText(fallback);
+        }
+
+        private AmountPromptOverlay atMousePosition() {
+            setPos(getMouseX(), getMouseY());
+            return this;
+        }
+
+        @Override
+        public void addWidgets() {
+            add(amountBox);
+            acceptButton = SimpleTextButton.accept(this, button -> submit(true));
+            cancelButton = SimpleTextButton.cancel(this, button -> submit(false));
+            add(acceptButton);
+            add(cancelButton);
+        }
+
+        @Override
+        public void alignWidgets() {
+            amountBox.setPosAndSize(8, 30, WIDTH - 16, 14);
+            acceptButton.setPosAndSize(8, 64, 84, 16);
+            cancelButton.setPosAndSize(WIDTH - 92, 64, 84, 16);
+        }
+
+        @Override
+        public boolean keyPressed(Key key) {
+            if (key.enter()) {
+                submit(true);
+                return true;
+            }
+            if (key.esc()) {
+                submit(false);
+                return true;
+            }
+            return super.keyPressed(key);
+        }
+
+        @Override
+        public void drawBackground(GuiGraphics graphics, Theme theme, int x, int y, int w, int h) {
+            theme.drawPanelBackground(graphics, x, y, w, h);
+            theme.drawString(graphics, title, x + 8, y + 6, Color4I.WHITE, Theme.SHADOW);
+            theme.drawString(graphics, label, x + 8, y + 20, Color4I.WHITE.withAlpha(220), Theme.SHADOW);
+            if (!error.isEmpty()) {
+                theme.drawString(graphics, Component.literal(error), x + 8, y + 48, Color4I.rgba(0xFFFF5555), Theme.SHADOW);
+            }
+        }
+
+        private void submit(boolean accepted) {
+            if (closed) {
+                return;
+            }
+            if (!accepted) {
+                closed = true;
+                getGui().closeModalPanel(this);
+                callback.accept(false, 0.0D);
+                return;
+            }
+            String text = amountBox.getText() == null ? "" : amountBox.getText().trim();
+            double value;
+            try {
+                value = Double.parseDouble(text);
+            } catch (NumberFormatException exception) {
+                error = "Enter a number, e.g. 60";
+                return;
+            }
+            if (!Double.isFinite(value) || value < 0.0D) {
+                error = "Value must be 0 or more";
+                return;
+            }
+            closed = true;
+            getGui().closeModalPanel(this);
+            callback.accept(true, value);
         }
     }
 

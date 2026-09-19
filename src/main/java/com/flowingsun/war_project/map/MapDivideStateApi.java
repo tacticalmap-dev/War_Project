@@ -59,18 +59,27 @@ public final class MapDivideStateApi {
         return changed;
     }
 
-    public static boolean setWarzoneFaction(MinecraftServer server, String warzoneId, String factionId) {
-        boolean changed = MapData.get(server).setWarzoneFaction(warzoneId, factionId);
+    public static boolean renameNode(MinecraftServer server, String oldNodeId, String newNodeId, String name) {
+        boolean changed = MapData.get(server).renameNode(oldNodeId, newNodeId, name).ok();
+        if (changed) {
+            com.flowingsun.war_project.wargame.NodeOccupationService.renameNode(oldNodeId, newNodeId);
+            com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
+        }
+        return changed;
+    }
+
+    public static boolean setNodeResourceOutputs(MinecraftServer server, String nodeId, double ammoPerMinute, double fuelPerMinute) {
+        boolean changed = MapData.get(server).setNodeResourceOutputs(nodeId, ammoPerMinute, fuelPerMinute);
         if (changed) {
             com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
         }
         return changed;
     }
 
-    public static boolean renameNode(MinecraftServer server, String oldNodeId, String newNodeId, String name) {
-        boolean changed = MapData.get(server).renameNode(oldNodeId, newNodeId, name).ok();
-        if (changed) {
-            com.flowingsun.war_project.wargame.NodeOccupationService.renameNode(oldNodeId, newNodeId);
+    /** Resets every owned node to neutral and notifies clients once when anything changed. */
+    public static int resetAllNodeFactions(MinecraftServer server) {
+        int changed = MapData.get(server).resetAllNodeFactions();
+        if (changed > 0) {
             com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
         }
         return changed;

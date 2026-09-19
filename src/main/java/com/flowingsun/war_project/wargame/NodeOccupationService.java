@@ -38,6 +38,13 @@ public final class NodeOccupationService {
         }
     }
 
+    /** Drops every tracked capture progress entry; returns how many were removed. */
+    public static int clearAll() {
+        int tracked = PROGRESS.size();
+        PROGRESS.clear();
+        return tracked;
+    }
+
     public static Set<String> getTrackedNodeIds() {
         return new LinkedHashSet<>(PROGRESS.keySet());
     }

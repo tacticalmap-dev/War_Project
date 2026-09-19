@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 public final class WarProjectNetwork {
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "3";
     private static int packetId;
     private static SimpleChannel channel;
 
@@ -43,7 +43,7 @@ public final class WarProjectNetwork {
             return;
         }
         channel = NetworkRegistry.newSimpleChannel(
-                new ResourceLocation(WarProject.MODID, "main"),
+                ResourceLocation.fromNamespaceAndPath(WarProject.MODID, "main"),
                 () -> PROTOCOL,
                 PROTOCOL::equals,
                 PROTOCOL::equals
@@ -82,6 +82,11 @@ public final class WarProjectNetwork {
                 .encoder(EditMapObjectPacket::encode)
                 .decoder(EditMapObjectPacket::decode)
                 .consumerMainThread(EditMapObjectPacket::handle)
+                .add();
+        channel.messageBuilder(SetNodeResourcePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SetNodeResourcePacket::encode)
+                .decoder(SetNodeResourcePacket::decode)
+                .consumerMainThread(SetNodeResourcePacket::handle)
                 .add();
     }
 
@@ -151,9 +156,9 @@ public final class WarProjectNetwork {
         }
     }
 
-    public static void sendDeleteWarzone(String warzoneId) {
+    public static void sendNodeResources(String nodeId, double ammoPerMinute, double fuelPerMinute) {
         if (channel != null) {
-            channel.sendToServer(new EditMapObjectPacket(EditMapObjectPacket.DELETE_WARZONE, warzoneId, "", ""));
+            channel.sendToServer(new SetNodeResourcePacket(nodeId, ammoPerMinute, fuelPerMinute));
         }
     }
 
@@ -402,12 +407,50 @@ public final class WarProjectNetwork {
     }
 
     /**
-     * Map editing actions sent from the FTB map editor: rename a node, delete a node, or delete a warzone.
+     * Node ammo/fuel output configured from the FTB map editor context menu. The map module stores
+     * the two numbers; the resource module is the only consumer.
+     */
+    public record SetNodeResourcePacket(String nodeId, double ammoPerMinute, double fuelPerMinute) {
+        static void encode(SetNodeResourcePacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeUtf(packet.nodeId == null ? "" : packet.nodeId, 64);
+            buffer.writeDouble(packet.ammoPerMinute);
+            buffer.writeDouble(packet.fuelPerMinute);
+        }
+
+        static SetNodeResourcePacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            return new SetNodeResourcePacket(buffer.readUtf(64), buffer.readDouble(), buffer.readDouble());
+        }
+
+        static void handle(SetNodeResourcePacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> {
+                ServerPlayer sender = context.get().getSender();
+                if (sender == null) {
+                    return;
+                }
+                if (!sender.hasPermissions(2)) {
+                    sender.sendSystemMessage(Component.literal("War Project node editing requires operator permission."));
+                    return;
+                }
+                MinecraftServer server = sender.getServer();
+                if (MapDivideStateApi.setNodeResourceOutputs(server, packet.nodeId, packet.ammoPerMinute, packet.fuelPerMinute)) {
+                    sender.sendSystemMessage(Component.literal("Node resource output set: " + packet.nodeId
+                            + " -> ammo=" + String.format(java.util.Locale.ROOT, "%.2f", packet.ammoPerMinute) + "/60s"
+                            + " fuel=" + String.format(java.util.Locale.ROOT, "%.2f", packet.fuelPerMinute) + "/60s"));
+                } else {
+                    sender.sendSystemMessage(Component.literal("Unable to set node resource output: " + packet.nodeId));
+                }
+            });
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    /**
+     * Map editing actions sent from the FTB map editor: rename a node or delete a node. A node and
+     * its warzone only ever exist together, so deleting the node removes its warzone with it.
      */
     public record EditMapObjectPacket(String action, String id, String newId, String name) {
         public static final String RENAME_NODE = "rename_node";
         public static final String DELETE_NODE = "delete_node";
-        public static final String DELETE_WARZONE = "delete_warzone";
 
         static void encode(EditMapObjectPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
             buffer.writeUtf(packet.action, 32);
@@ -443,17 +486,9 @@ public final class WarProjectNetwork {
                         if (MapData.get(server).deleteNode(packet.id)) {
                             NodeOccupationService.clear(packet.id);
                             WarProjectNetwork.broadcastMap(server);
-                            sender.sendSystemMessage(Component.literal("Deleted node: " + packet.id));
+                            sender.sendSystemMessage(Component.literal("Deleted node: " + packet.id + " (its warzone was removed too)"));
                         } else {
                             sender.sendSystemMessage(Component.literal("Node not found: " + packet.id));
-                        }
-                    }
-                    case DELETE_WARZONE -> {
-                        if (MapData.get(server).deleteWarzone(packet.id)) {
-                            WarProjectNetwork.broadcastMap(server);
-                            sender.sendSystemMessage(Component.literal("Deleted warzone: " + packet.id));
-                        } else {
-                            sender.sendSystemMessage(Component.literal("Warzone not found: " + packet.id));
                         }
                     }
                     default -> {

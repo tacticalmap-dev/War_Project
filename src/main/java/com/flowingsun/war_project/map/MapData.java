@@ -119,7 +119,7 @@ public final class MapData extends SavedData {
         }
 
         String name = nodeName == null || nodeName.isBlank() ? cleanNodeId : nodeName.trim();
-        Node node = new Node(cleanNodeId, name, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), Set.copyOf(nodeChunks));
+        Node node = new Node(cleanNodeId, name, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), 0.0D, 0.0D, Set.copyOf(nodeChunks));
         Warzone warzone = new Warzone(cleanNodeId, cleanNodeId, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), Set.copyOf(cleanWarzoneChunks));
         nodes.put(cleanNodeId, node);
         warzones.put(warzone.id(), warzone);
@@ -162,14 +162,6 @@ public final class MapData extends SavedData {
         return true;
     }
 
-    public boolean deleteWarzone(String warzoneId) {
-        if (warzones.remove(warzoneId) != null) {
-            setDirty();
-            return true;
-        }
-        return false;
-    }
-
     public boolean setNodeFaction(String nodeId, String factionId) {
         Node node = nodes.get(nodeId);
         if (node == null) {
@@ -182,14 +174,42 @@ public final class MapData extends SavedData {
         return true;
     }
 
-    public boolean setWarzoneFaction(String warzoneId, String factionId) {
-        Warzone warzone = warzones.get(warzoneId);
-        if (warzone == null) {
+    /**
+     * Sets the node's configured ammo and fuel output per 60 seconds. Settlement itself lives in the
+     * resource module; the map module only stores the two numbers.
+     */
+    public boolean setNodeResourceOutputs(String nodeId, double ammoPerMinute, double fuelPerMinute) {
+        Node node = nodes.get(cleanId(nodeId));
+        if (node == null
+                || !Double.isFinite(ammoPerMinute) || ammoPerMinute < 0.0D
+                || !Double.isFinite(fuelPerMinute) || fuelPerMinute < 0.0D) {
             return false;
         }
-        warzones.put(warzoneId, warzone.withFaction(normalizeFaction(factionId)));
+        nodes.put(node.id(), node.withResourceOutputs(ammoPerMinute, fuelPerMinute));
         setDirty();
         return true;
+    }
+
+    /**
+     * Resets every owned node back to neutral, mirroring the faction onto its warzone. Returns the
+     * number of nodes that actually changed.
+     */
+    public int resetAllNodeFactions() {
+        int changed = 0;
+        for (Map.Entry<String, Node> entry : nodes.entrySet()) {
+            Node node = entry.getValue();
+            if (!isFaction(node.factionId())) {
+                continue;
+            }
+            entry.setValue(node.withFaction("neutral"));
+            changed++;
+        }
+        if (changed == 0) {
+            return 0;
+        }
+        warzones.replaceAll((id, warzone) -> isFaction(warzone.factionId()) ? warzone.withFaction("neutral") : warzone);
+        setDirty();
+        return changed;
     }
 
     public CompoundTag clientSnapshot() {
@@ -275,6 +295,10 @@ public final class MapData extends SavedData {
         return color == 0 ? 0x2E7DFF : color & 0xFFFFFF;
     }
 
+    private static double normalizeResource(double value) {
+        return Double.isFinite(value) && value > 0.0D ? value : 0.0D;
+    }
+
     private static Set<Long> readChunks(CompoundTag tag) {
         Set<Long> chunks = new LinkedHashSet<>();
         ListTag chunkTags = tag.getList("chunks", Tag.TAG_COMPOUND);
@@ -297,12 +321,17 @@ public final class MapData extends SavedData {
         return tags;
     }
 
-    public record Node(String id, String name, String factionId, int colorRgb, long updatedAt, Set<Long> chunks) {
+    public record Node(String id, String name, String factionId, int colorRgb, long updatedAt,
+                       double ammoPerMinute, double fuelPerMinute, Set<Long> chunks) {
         static Node load(CompoundTag tag) {
             String id = cleanId(tag.getString("id"));
             String name = tag.getString("name").isBlank() ? id : tag.getString("name");
+            // "resource_per_minute" was the pre-split single-output key: migrate it into ammo.
+            double ammo = normalizeResource(tag.contains("ammo_per_minute")
+                    ? tag.getDouble("ammo_per_minute")
+                    : tag.getDouble("resource_per_minute"));
             return new Node(id, name, normalizeFaction(tag.getString("faction_id")), tag.getInt("color_rgb"),
-                    tag.getLong("updated_at"), Set.copyOf(readChunks(tag)));
+                    tag.getLong("updated_at"), ammo, normalizeResource(tag.getDouble("fuel_per_minute")), Set.copyOf(readChunks(tag)));
         }
 
         CompoundTag save() {
@@ -312,16 +341,23 @@ public final class MapData extends SavedData {
             tag.putString("faction_id", factionId);
             tag.putInt("color_rgb", colorRgb);
             tag.putLong("updated_at", updatedAt);
+            tag.putDouble("ammo_per_minute", ammoPerMinute);
+            tag.putDouble("fuel_per_minute", fuelPerMinute);
             tag.put("chunks", writeChunks(chunks));
             return tag;
         }
 
         Node withIdentity(String newId, String newName) {
-            return new Node(newId, newName, factionId, colorRgb, System.currentTimeMillis(), chunks);
+            return new Node(newId, newName, factionId, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks);
         }
 
         Node withFaction(String faction) {
-            return new Node(id, name, faction, colorRgb, System.currentTimeMillis(), chunks);
+            return new Node(id, name, faction, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks);
+        }
+
+        Node withResourceOutputs(double ammo, double fuel) {
+            return new Node(id, name, factionId, colorRgb, System.currentTimeMillis(),
+                    normalizeResource(ammo), normalizeResource(fuel), chunks);
         }
     }
 

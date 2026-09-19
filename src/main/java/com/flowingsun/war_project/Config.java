@@ -29,6 +29,14 @@ public final class Config {
             .comment("Enable capture debug logging.")
             .define("captureDebugMode", false);
 
+    private static final ForgeConfigSpec.DoubleValue RESOURCE_SETTLE_INTERVAL_SECONDS = BUILDER
+            .comment("Seconds between resource settlements; each settlement grants output * seconds / 60.")
+            .defineInRange("resourceSettleIntervalSeconds", 5.0D, 0.05D, 3600.0D);
+
+    private static final ForgeConfigSpec.BooleanValue RESOURCE_DEBUG_MODE = BUILDER
+            .comment("Enable resource settlement debug logging.")
+            .define("resourceDebugMode", false);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static double nodeCaptureBaseSeconds;
@@ -36,6 +44,8 @@ public final class Config {
     public static double capturePlayerCountRateMultiplier;
     public static double capturePlayerCountRateMultiplierCap;
     public static boolean captureDebugMode;
+    public static double resourceSettleIntervalSeconds = 5.0D;
+    public static boolean resourceDebugMode;
 
     private Config() {
     }
@@ -47,5 +57,7 @@ public final class Config {
         capturePlayerCountRateMultiplier = CAPTURE_PLAYER_COUNT_RATE_MULTIPLIER.get();
         capturePlayerCountRateMultiplierCap = CAPTURE_PLAYER_COUNT_RATE_MULTIPLIER_CAP.get();
         captureDebugMode = CAPTURE_DEBUG_MODE.get();
+        resourceSettleIntervalSeconds = RESOURCE_SETTLE_INTERVAL_SECONDS.get();
+        resourceDebugMode = RESOURCE_DEBUG_MODE.get();
     }
 }
