@@ -84,6 +84,13 @@
       "updated_at": "2026-09-19T07:15:18.215Z",
       "target": "memory",
       "importance": "normal"
+    },
+    {
+      "content": "War Project × SBW（Superb Warfare）可选兼容（2026-09-19 用户定调）：当玩家处于 SBW 载具第一视角（即炮镜视角）时，隐藏资源灵动岛 HUD（不渲染资源量）。判定实现（无需编译期依赖，SBW 缺失时惰性）：Minecraft.player.getVehicle() 的类名（沿父类链）以 \"com.atsuishio.superbwarfare.entity.vehicle\" 开头，且 Minecraft.options.getCameraType().isFirstPerson() 为真——后者与 SBW 自己的 RenderContext#isFirstPerson() 完全等价（javap 证据：Options.m_92176_().m_90612_()Z）。代码位置 client/SuperbWarfareCompat.java，被 client/ResourceHudOverlay 调用。",
+      "created_at": "2026-09-19T07:36:56.853Z",
+      "updated_at": "2026-09-19T07:36:56.853Z",
+      "target": "memory",
+      "importance": "normal"
     }
   ]
 }

@@ -51,6 +51,10 @@ public final class ResourceHudOverlay {
         if (minecraft.options.hideGui || minecraft.player == null || !ResourceClientState.isRunning()) {
             return;
         }
+        // Superb Warfare's vehicle gun-sight view owns the screen: keep the resource strip off it.
+        if (SuperbWarfareCompat.isVehicleFirstPerson()) {
+            return;
+        }
         Optional<String> teamId = TeamClientState.teamOf(minecraft.player.getScoreboardName());
         if (teamId.isEmpty()) {
             return;

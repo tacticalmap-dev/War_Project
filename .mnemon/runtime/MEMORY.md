@@ -15,3 +15,5 @@ War Project 资源 HUD 规格（2026-09-19 用户定调）：执行 /warproject 
 War Project 世界地图 node 标记规格（2026-09-19 用户定调）：node 名称与其资源收益行视为一个整体、垂直居中于 node 几何中心（无收益行时名称自身居中）；收益行在缩放 <2.0x 时完全不渲染（只留名称，初版 2.5x 后由用户改为 2.0x）；图标尺寸与各间距随缩放线性变化，以 5x 为基准（基准值 图标14px / 图标-文字 2 / 两组间 6 / 行间距 2），整体系数 clamp 0.7~2.2，文字保持默认字号。缩放判定值取 Xaero `GuiMap.scale` 字段——它就是界面显示的 “5.16x” 那个数（依据：applyZoomLimits 里 destScale 的区间常量 0.0625/50.0，且把下限改成 1.0 即界面 1x；截图中 1 chunk≈88 物理像素≈5.5px/方块与显示值吻合）。
 §
 War Project 资源 HUD 视觉规格（2026-09-19 用户定调）：HUD 区域必须画成灵动岛样式的纯黑胶囊背景（PaletteColor 0xFF000000，左右内边距 8、上下内边距 3，高度 = 图标 16 + 6 = 22，圆角半径取 height/2；GuiGraphics.fill 逐行内缩实现真圆角，不用 fill 直角矩形），内容为「ammo 图标 + 存量 + '+每60s速率' ｜ fuel 图标 + 存量 + '+每60s速率'」整体居中于屏幕正上方。
+§
+War Project × SBW（Superb Warfare）可选兼容（2026-09-19 用户定调）：当玩家处于 SBW 载具第一视角（即炮镜视角）时，隐藏资源灵动岛 HUD（不渲染资源量）。判定实现（无需编译期依赖，SBW 缺失时惰性）：Minecraft.player.getVehicle() 的类名（沿父类链）以 "com.atsuishio.superbwarfare.entity.vehicle" 开头，且 Minecraft.options.getCameraType().isFirstPerson() 为真——后者与 SBW 自己的 RenderContext#isFirstPerson() 完全等价（javap 证据：Options.m_92176_().m_90612_()Z）。代码位置 client/SuperbWarfareCompat.java，被 client/ResourceHudOverlay 调用。

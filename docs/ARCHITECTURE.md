@@ -36,6 +36,7 @@ War_Project/
 │  ├─ wargame/                 # 占领：WargameModule, WargameService, NodeOccupationService, CaptureProgressQueryApi
 │  ├─ resource/                # 资源经济：ResourceKind, ResourceData(SavedData), ResourceService, ResourceApi, ResourceModule
 │  ├─ client/Resource*.java    # 资源 HUD：ResourceClientState（快照镜像）+ ResourceHudOverlay（顶部 ammo/fuel 条）
+│  ├─ client/SuperbWarfareCompat.java  # SBW 可选兼容（纯类名判定，无编译期依赖）
 │  ├─ net/                     # WarProjectNetwork：SimpleChannel + 8 个数据包
 │  ├─ command/                 # WarProjectCommands：/warproject 全局指令树（含 game / resource）
 │  ├─ client/                  # ClientMapState, WargameCaptureClient, client/xaero/XaeroWarProjectMapRenderer
@@ -174,7 +175,7 @@ sequenceDiagram
 | | `resource/ResourceService` | 挂 Forge 总线，`ServerTickEvent` 累计 tick：阶段非 RUNNING 时清零待结算 tick（不补算），攒满 `intervalTicks = max(1, round(resourceSettleIntervalSeconds * 20))` 后按真实经过秒数分别结算 `ammoPerMinute * elapsedSeconds / 60` 与 `fuelPerMinute * elapsedSeconds / 60`，只发给 node 归属且在 `TeamData` 中仍存在的队伍（盟友不分成）。 |
 | | `resource/ResourceApi` | 服务端门面：`stock` / `stocks`（只列现存队伍）/ `set` / `add`（管理员，任意阶段，写入同样受 999 上限夹紧）/ `spend(kind)`（消耗，仅 RUNNING）。 |
 | | `resource/ResourceModule` | 注册服务与阶段监听；收到 `ENDED` 时清空所有队伍资源（两种一起），并在任何阶段变化后广播一次资源快照（HUD 显隐与刷新）。 |
-| 资源 HUD | `client/ResourceClientState` + `client/ResourceHudOverlay` | 服务端 `ResourceSyncPacket` 的客户端镜像；HUD 注册在 `VanillaGuiOverlay.HOTBAR` 之上，只在 `running=true` 且本地玩家属于某队时显示：屏幕正上方居中，两条「图标 + 当前量 + `+每60s增量`」（图标 `assets/war_project/textures/gui/ammo.png` / `fuel.png`，128×128 缩放到 16×16；速率为该队全部归属 node 的 60s 产出之和，0 时用灰色）。 |
+| 资源 HUD | `client/ResourceClientState` + `client/ResourceHudOverlay` | 服务端 `ResourceSyncPacket` 的客户端镜像；HUD 注册在 `VanillaGuiOverlay.HOTBAR` 之上，只在 `running=true` 且本地玩家属于某队时显示（本地玩家处于 Superb Warfare 载具第一人称／炮镜视角时整条隐藏，见 `client/SuperbWarfareCompat`）：屏幕正上方居中，两条「图标 + 当前量 + `+每60s增量`」（图标 `assets/war_project/textures/gui/ammo.png` / `fuel.png`，128×128 缩放到 16×16；速率为该队全部归属 node 的 60s 产出之和，0 时用灰色）。 |
 | | `map/MapData#setNodeResourceOutputs` | mapdevide 侧只存「该 node 60 秒的弹药与燃料产出量」两个数值（NBT `ammo_per_minute` / `fuel_per_minute`；旧的单值键 `resource_per_minute` 迁移为 ammo），结算不在这里发生；`resetAllNodeFactions()` 供 `ENDED` 把全部 node 及其 warzone 重置为 neutral。 |
 
 #### e33chat 可选集成（队伍 / 同盟 → 群组）
@@ -199,6 +200,7 @@ sequenceDiagram
 | 客户端状态镜像 | `client/ClientMapState`、`client/ResourceClientState`、`team/TeamClientState` | 保存服务端下发的 NBT / 资源快照并提供 `version` 版本号，作为渲染层的失效判据与查询源。 |
 | 渲染计算 | `client/xaero/XaeroWarProjectMapRenderer` | 与具体地图模组无关的纯计算层：按「本方/同盟=蓝、敌对=红、中立=白」解析阵营配色；战区做半透明填充 + 虚线边、节点做实线边，只在区域外边界描边；`regionHash` 把地图版本、队伍版本、区块归属、阵营关系混合成一个哈希，供地图模组做重绘缓存键。 |
 | 可选兼容 | `src/optionalXaero`（9 文件） | `XaeroWorldMapSessionMixin` / `XaeroMinimapSessionMixin` 用 `@Redirect` 挂进 Xaero 的 `HighlighterRegistry.end()` 完成注册；`XaeroCommonMinimapRendererMixin` 在小地图渲染前绘制叠加层；`XaeroWorldMapScreenOverlay` 通过 `ScreenEvent.Render.Post` 反射读相机/缩放字段直接绘制战区与节点边框。 |
+| 可选兼容 | `client/SuperbWarfareCompat` | 主源码集内的**零依赖**兼容（不新增编译期依赖、不改 build.gradle）：HUD 渲染前判断「本地玩家的载具类名（沿父类链）以 `com.atsuishio.superbwarfare.entity.vehicle` 开头」且「`Minecraft.options.getCameraType().isFirstPerson()` 为真」，满足则整条资源灵动岛不渲染。第一人称用 vanilla 判定，因为 SBW 自己的 `RenderContext#isFirstPerson()` 反编译后就是同一个表达式（`Options.m_92176_().m_90612_()Z`）。SBW 缺失时该类永远返回 false，本模组行为不变。 |
 | 可选兼容 | `src/optionalFtb`（1 文件） | `FtbChunksMapDivideClient`：在 FTB Chunks 大地图上提供工具栏与拖拽选区，两阶段「选节点区块 → 命名 → 选战区区块 → 确认」，发 `CreateNodeWarzonePacket`；前置校验（战区须包含全部节点区块、至少一个非节点区块）在客户端先提示，服务端再兜底校验。 |
 
 ---
