@@ -51,6 +51,8 @@ public final class XaeroWorldMapScreenOverlay {
     private static final int EDGE_PRIORITY_NODE = 1;
     private static final int LABEL_COLOR = 0xFFFFFFFF;
     private static final int LABEL_MAX_LENGTH = 16;
+    /** Everything outside the map area: a translucent red haze that reads at a glance. */
+    private static final int OUT_OF_BOUNDS_COLOR = 0x38FF3B30;
     private static final double MIN_GUI_SCALE = 0.015D;
 
     /**
@@ -131,6 +133,7 @@ public final class XaeroWorldMapScreenOverlay {
 
         BufferBuilder buffer = Tesselator.getInstance().getBuilder();
         buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        drawOutOfBoundsShade(buffer, matrix, projection, screenWidth, screenHeight);
         drawWarzoneFills(buffer, matrix, projection, screenWidth, screenHeight);
         drawEdges(buffer, matrix, projection, screenWidth, screenHeight);
         BufferUploader.drawWithShader(buffer.end());
@@ -237,6 +240,37 @@ public final class XaeroWorldMapScreenOverlay {
 
     private static String gainText(long amount) {
         return "+" + amount;
+    }
+
+    /**
+     * Shades everything outside the map area. Drawn first inside the same batch so warzone fills, node
+     * edges and labels stay readable on top of the haze, and clamped to the screen so a map area that is
+     * off screen simply covers the whole view.
+     */
+    private static void drawOutOfBoundsShade(BufferBuilder buffer, Matrix4f matrix, MapProjection projection, int screenWidth, int screenHeight) {
+        ClientMapState.ClientBounds bounds = ClientMapState.bounds();
+        if (bounds == null) {
+            return;
+        }
+        FloatRect rect = chunkRect(projection, bounds.minChunkX(), bounds.minChunkZ(), bounds.maxChunkX() + 1, bounds.maxChunkZ() + 1);
+        float shadeTop = clamp(rect.y1(), 0.0F, screenHeight);
+        float shadeBottom = clamp(rect.y2(), 0.0F, screenHeight);
+        float shadeLeft = clamp(rect.x1(), 0.0F, screenWidth);
+        float shadeRight = clamp(rect.x2(), 0.0F, screenWidth);
+        quad(buffer, matrix, 0.0F, 0.0F, screenWidth, shadeTop);
+        quad(buffer, matrix, 0.0F, shadeBottom, screenWidth, screenHeight);
+        quad(buffer, matrix, 0.0F, shadeTop, shadeLeft, shadeBottom);
+        quad(buffer, matrix, shadeRight, shadeTop, screenWidth, shadeBottom);
+    }
+
+    private static void quad(BufferBuilder buffer, Matrix4f matrix, float x1, float y1, float x2, float y2) {
+        if (x2 > x1 && y2 > y1) {
+            addQuad(buffer, matrix, x1, y1, x2, y2, OUT_OF_BOUNDS_COLOR);
+        }
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static void drawWarzoneFills(BufferBuilder buffer, Matrix4f matrix, MapProjection projection, int screenWidth, int screenHeight) {

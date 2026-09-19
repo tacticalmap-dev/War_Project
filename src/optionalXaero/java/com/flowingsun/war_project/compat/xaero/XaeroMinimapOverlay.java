@@ -27,6 +27,8 @@ import java.util.function.IntPredicate;
 public final class XaeroMinimapOverlay {
     private static final int LABEL_COLOR = 0xFFFFFFFF;
     private static final int LABEL_MAX_LENGTH = 14;
+    /** Everything outside the map area; slightly stronger than the world map's haze. */
+    private static final int OUT_OF_BOUNDS_COLOR = 0x44FF3B30;
     private static final float LABEL_SCALE = 2.0F;
     private static final double LABEL_EDGE_MARGIN = 10.0D;
     private static Field psField;
@@ -57,6 +59,9 @@ public final class XaeroMinimapOverlay {
         XaeroWarProjectMapRenderer.DashPattern dashPattern = XaeroWarProjectMapRenderer.dashPattern(half * 2);
         int thickness = XaeroWarProjectMapRenderer.edgeThickness(half * 2);
 
+        // The haze is always a screen layer pass: it sits above whatever the framebuffer path drew.
+        drawOutOfBoundsShade(graphics, renderPos, projection, viewport);
+
         // The framebuffer path draws the shapes as part of the map texture, which keeps them aligned with
         // the terrain. This screen pass then only adds the labels, plus the shapes as a fallback for when
         // Xaero is not using its FBO renderer at all (safe mode), so nothing is drawn twice.
@@ -66,6 +71,73 @@ public final class XaeroMinimapOverlay {
             drawNodeEdges(graphics, renderPos, projection, viewport, half, thickness, dashPattern);
         }
         drawLabels(graphics, renderPos, projection);
+    }
+
+    /**
+     * Shades everything outside the map area. The minimap is rotated by the player's facing, so the map
+     * rectangle projects to a rotated quad: every viewport row is scanned for the row's inside span and
+     * the two remaining spans are shaded. A view that cannot see the rectangle at all is covered in one
+     * clipped fill instead.
+     */
+    private static void drawOutOfBoundsShade(GuiGraphics graphics, Vec3 renderPos, MinimapProjection projection, Viewport viewport) {
+        ClientMapState.ClientBounds bounds = ClientMapState.bounds();
+        if (bounds == null || viewport.isEmpty()) {
+            return;
+        }
+        double[] cornerMinMin = projection.project(renderPos, bounds.minBlockX(), bounds.minBlockZ());
+        double[] cornerMaxMin = projection.project(renderPos, bounds.maxBlockX(), bounds.minBlockZ());
+        double[] cornerMaxMax = projection.project(renderPos, bounds.maxBlockX(), bounds.maxBlockZ());
+        double[] cornerMinMax = projection.project(renderPos, bounds.minBlockX(), bounds.maxBlockZ());
+        double[][] quad = {cornerMinMin, cornerMaxMin, cornerMaxMax, cornerMinMax};
+
+        double minX = Math.min(Math.min(cornerMinMin[0], cornerMaxMin[0]), Math.min(cornerMaxMax[0], cornerMinMax[0]));
+        double maxX = Math.max(Math.max(cornerMinMin[0], cornerMaxMin[0]), Math.max(cornerMaxMax[0], cornerMinMax[0]));
+        double minY = Math.min(Math.min(cornerMinMin[1], cornerMaxMin[1]), Math.min(cornerMaxMax[1], cornerMinMax[1]));
+        double maxY = Math.max(Math.max(cornerMinMin[1], cornerMaxMin[1]), Math.max(cornerMaxMax[1], cornerMinMax[1]));
+        double halfSpan = Math.max(maxX - minX, maxY - minY) * 0.5D;
+        if (!viewport.intersectsBlock((minX + maxX) * 0.5D, (minY + maxY) * 0.5D, (int) Math.ceil(halfSpan))) {
+            fillClipped(graphics, viewport, viewport.xMinAt(0) - 1, viewport.yMin(),
+                    viewport.xMaxAt(0) + 1, viewport.yMax(), OUT_OF_BOUNDS_COLOR, null);
+            return;
+        }
+
+        for (int y = viewport.yMin(); y < viewport.yMax(); y++) {
+            if (!viewport.rowVisible(y)) {
+                continue;
+            }
+            int xs = viewport.xMinAt(y);
+            int xe = viewport.xMaxAt(y);
+            if (xe <= xs) {
+                continue;
+            }
+            // Inside span of this row; xe + 1 stays a sentinel meaning "the map area misses this row".
+            int insideX1 = xe + 1;
+            int insideX2 = xe + 1;
+            double rowY = y + 0.5D;
+            double left = Double.POSITIVE_INFINITY;
+            double right = Double.NEGATIVE_INFINITY;
+            for (int i = 0; i < 4; i++) {
+                double[] a = quad[i];
+                double[] b = quad[(i + 1) % 4];
+                if ((a[1] <= rowY) == (b[1] <= rowY)) {
+                    continue;
+                }
+                double t = (rowY - a[1]) / (b[1] - a[1]);
+                double x = a[0] + t * (b[0] - a[0]);
+                left = Math.min(left, x);
+                right = Math.max(right, x);
+            }
+            if (left <= right) {
+                insideX1 = (int) Math.ceil(left);
+                insideX2 = (int) Math.floor(right) + 1;
+            }
+            if (insideX1 > xs) {
+                graphics.fill(xs, y, Math.min(insideX1, xe), y + 1, OUT_OF_BOUNDS_COLOR);
+            }
+            if (insideX2 < xe) {
+                graphics.fill(Math.max(insideX2, xs), y, xe, y + 1, OUT_OF_BOUNDS_COLOR);
+            }
+        }
     }
 
     private static void drawWarzoneFills(GuiGraphics graphics, Vec3 renderPos, MinimapProjection projection, Viewport viewport, int half) {

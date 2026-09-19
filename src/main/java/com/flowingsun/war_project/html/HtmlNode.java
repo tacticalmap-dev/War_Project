@@ -88,9 +88,14 @@ public final class HtmlNode {
             into.color = from.color;
             into.hasColor = true;
         }
-        if (from.shadowSize >= 0) {
-            into.shadowSize = from.shadowSize;
-            into.shadowColor = from.shadowColor;
+        if (!from.shadows.isEmpty()) {
+            into.shadows.clear();
+            into.shadows.addAll(from.shadows);
+        }
+        if (from.hasGradient) {
+            into.gradientTop = from.gradientTop;
+            into.gradientBottom = from.gradientBottom;
+            into.hasGradient = true;
         }
         if (from.borderWidth > 0) {
             into.borderWidth = from.borderWidth;

@@ -4914,17 +4914,17 @@
 
         <!-- Connection paths (before components for correct z-order) -->
         <path data-edge-from="client" data-edge-to="net" data-edge-label="CaptureIntentPacket" data-edge-key="0" data-edge-id="intent" data-composition-points="250,295;420,295" d="M 250 295 L 420 295" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="net" data-edge-to="wargame" data-edge-label="占领意图" data-edge-key="1" data-edge-id="dispatch" data-composition-points="610,295;780,295" d="M 610 295 L 780 295" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="wargame" data-edge-to="mapdata" data-edge-label="改写阵营" data-edge-key="2" data-edge-id="apply" data-composition-points="970,302;1140,302" d="M 970 302 L 1140 302" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="net" data-edge-to="nodeLJYS" data-edge-label="占领意图" data-edge-key="1" data-edge-id="dispatch" data-composition-points="610,295;780,295" d="M 610 295 L 780 295" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="nodeLJYS" data-edge-to="mapdata" data-edge-label="改写阵营" data-edge-key="2" data-edge-id="apply" data-composition-points="970,302;1140,302" d="M 970 302 L 1140 302" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="mapdata" data-edge-to="screen" data-edge-label="MapSyncPacket" data-edge-key="3" data-edge-id="broadcast" data-composition-points="1330,302;1500,302" d="M 1330 302 L 1500 302" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="screen" data-edge-to="xaero" data-edge-label="渲染叠加层" data-edge-key="4" data-edge-id="render" data-composition-points="1595,334;1595,480" d="M 1595 334 L 1595 480" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="ftb" data-edge-to="net" data-edge-label="CreateNodeWarzone" data-edge-key="5" data-edge-id="create-node" data-composition-points="250,512;335,512;335,309;420,309" d="M 250 512 L 327 512 Q 335 512 335 504 L 335 317 Q 335 309 343 309 L 420 309" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="cfg" data-edge-to="wargame" data-edge-label="占领参数" data-edge-key="6" data-edge-id="config" data-composition-points="610,512;695,512;695,309;780,309" d="M 610 512 L 687 512 Q 695 512 695 504 L 695 317 Q 695 309 703 309 L 780 309" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="cfg" data-edge-to="nodeLJYS" data-edge-label="占领参数" data-edge-key="6" data-edge-id="config" data-composition-points="610,512;695,512;695,309;780,309" d="M 610 512 L 687 512 Q 695 512 695 504 L 695 317 Q 695 309 703 309 L 780 309" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="cmd" data-edge-to="mapdata" data-edge-label="setfaction / delete" data-edge-key="7" data-edge-id="admin-map" data-composition-points="1235,124;1235,270" d="M 1235 124 L 1235 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="entry" data-edge-to="registry" data-edge-label="构造三大模块" data-edge-key="8" data-edge-id="build-modules" data-composition-points="610,92;780,92" d="M 610 92 L 780 92" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="entry" data-edge-to="net" data-edge-label="注册 5 个数据包" data-edge-key="9" data-edge-id="register-channel" data-composition-points="515,124;515,270" d="M 515 124 L 515 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="registry" data-edge-to="wargame" data-edge-label="注册 Tick 监听" data-edge-key="10" data-edge-id="register-service" data-composition-points="875,124;875,270" d="M 875 124 L 875 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="wargame" data-edge-to="teamdata" data-edge-label="读队伍 / 盟友" data-edge-key="11" data-edge-id="read-teams" data-composition-points="875,334;875,480" d="M 875 334 L 875 480" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="registry" data-edge-to="nodeLJYS" data-edge-label="注册 Tick 监听" data-edge-key="10" data-edge-id="register-service" data-composition-points="875,124;875,270" d="M 875 124 L 875 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="nodeLJYS" data-edge-to="teamdata" data-edge-label="读队伍 / 盟友" data-edge-key="11" data-edge-id="read-teams" data-composition-points="875,334;875,480" d="M 875 334 L 875 480" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="registry" data-edge-to="cmd" data-edge-label="TeamModule 注册指令" data-edge-key="12" data-edge-id="register-commands" data-composition-points="970,92;1140,92" d="M 970 92 L 1140 92" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
         <!-- Components -->
@@ -4951,8 +4951,8 @@
         <text data-detail="context" x="515" y="106" class="t-muted" font-size="9" text-anchor="middle">@Mod 入口</text>
         </g>
 
-        <g id="node-client" data-node-id="client" data-node-label="客户端占领探测" tabindex="0" role="button" aria-label="Focus 客户端占领探测, WargameCaptureClient, Architecture component" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="WargameCaptureClient" data-node-context="Architecture component">
-          <title>客户端占领探测 · WargameCaptureClient · Architecture component</title>
+        <g id="node-client" data-node-id="client" data-node-label="客户端占领探测" tabindex="0" role="button" aria-label="Focus 客户端占领探测, NodeLJYSCaptureClient, Architecture component" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="NodeLJYSCaptureClient" data-node-context="Architecture component">
+          <title>客户端占领探测 · NodeLJYSCaptureClient · Architecture component</title>
           <rect x="60" y="270" width="190" height="64" rx="6" class="c-mask"/>
           <rect x="60" y="270" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(66 276) scale(0.6875)">
@@ -4962,7 +4962,7 @@
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
           <text data-detail-anchor x="155" y="300" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">客户端占领探测</text>
-        <text data-detail="context" x="155" y="316" class="t-muted" font-size="9" text-anchor="middle">WargameCaptureClient</text>
+        <text data-detail="context" x="155" y="316" class="t-muted" font-size="9" text-anchor="middle">NodeLJYSCaptureClient</text>
         </g>
 
         <g id="node-net" data-node-id="net" data-node-label="WarProjectNetwork" tabindex="0" role="button" aria-label="Focus WarProjectNetwork, SimpleChannel · 5 类包, Architecture component" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="SimpleChannel · 5 类包" data-node-context="Architecture component">
@@ -4979,15 +4979,15 @@
         <text data-detail="context" x="515" y="316" class="t-muted" font-size="9" text-anchor="middle">SimpleChannel · 5 类包</text>
         </g>
 
-        <g id="node-registry" data-node-id="registry" data-node-label="ModuleRegistry" tabindex="0" role="button" aria-label="Focus ModuleRegistry, map / team / wargame, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="map / team / wargame" data-node-context="Architecture component">
-          <title>ModuleRegistry · map / team / wargame · Architecture component</title>
+        <g id="node-registry" data-node-id="registry" data-node-label="ModuleRegistry" tabindex="0" role="button" aria-label="Focus ModuleRegistry, map / team / nodeLJYS, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="map / team / nodeLJYS" data-node-context="Architecture component">
+          <title>ModuleRegistry · map / team / nodeLJYS · Architecture component</title>
           <rect x="780" y="60" width="190" height="64" rx="6" class="c-mask"/>
           <rect x="780" y="60" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(786 66) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="875" y="90" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ModuleRegistry</text>
-        <text data-detail="context" x="875" y="106" class="t-muted" font-size="9" text-anchor="middle">map / team / wargame</text>
+        <text data-detail="context" x="875" y="106" class="t-muted" font-size="9" text-anchor="middle">map / team / nodeLJYS</text>
         </g>
 
         <g id="node-cfg" data-node-id="cfg" data-node-label="Config" tabindex="0" role="button" aria-label="Focus Config, 占领参数配置, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="占领参数配置" data-node-context="Architecture component">
@@ -5001,14 +5001,14 @@
         <text data-detail="context" x="515" y="526" class="t-muted" font-size="9" text-anchor="middle">占领参数配置</text>
         </g>
 
-        <g id="node-wargame" data-node-id="wargame" data-node-label="WargameService" tabindex="0" role="button" aria-label="Focus WargameService, 占领计时 · 20 tick, 服务端领地状态" aria-pressed="false" data-node-kind="backend" data-node-sublabel="占领计时 · 20 tick" data-node-context="服务端领地状态">
-          <title>WargameService · 占领计时 · 20 tick · 服务端领地状态</title>
+        <g id="node-nodeLJYS" data-node-id="nodeLJYS" data-node-label="NodeLJYSService" tabindex="0" role="button" aria-label="Focus NodeLJYSService, 占领计时 · 20 tick, 服务端领地状态" aria-pressed="false" data-node-kind="backend" data-node-sublabel="占领计时 · 20 tick" data-node-context="服务端领地状态">
+          <title>NodeLJYSService · 占领计时 · 20 tick · 服务端领地状态</title>
           <rect x="780" y="270" width="190" height="64" rx="6" class="c-mask"/>
           <rect x="780" y="270" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(786 276) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="875" y="300" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">WargameService</text>
+          <text data-detail-anchor x="875" y="300" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">NodeLJYSService</text>
         <text data-detail="context" x="875" y="316" class="t-muted" font-size="9" text-anchor="middle">占领计时 · 20 tick</text>
         </g>
 
@@ -5078,11 +5078,11 @@
           <rect x="284.4" y="275" width="101.2" height="14" rx="3" class="c-mask"/>
           <text x="335" y="285" class="t-backend" font-size="8" text-anchor="middle">CaptureIntentPacket</text>
         </g>
-        <g data-detail="context" data-edge-from="net" data-edge-to="wargame" data-edge-label="占领意图" data-edge-key="1" data-edge-id="dispatch">
+        <g data-detail="context" data-edge-from="net" data-edge-to="nodeLJYS" data-edge-label="占领意图" data-edge-key="1" data-edge-id="dispatch">
           <rect x="670.8" y="275" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="695" y="285" class="t-backend" font-size="8" text-anchor="middle">占领意图</text>
         </g>
-        <g data-detail="context" data-edge-from="wargame" data-edge-to="mapdata" data-edge-label="改写阵营" data-edge-key="2" data-edge-id="apply">
+        <g data-detail="context" data-edge-from="nodeLJYS" data-edge-to="mapdata" data-edge-label="改写阵营" data-edge-key="2" data-edge-id="apply">
           <rect x="1030.8" y="282" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="1055" y="292" class="t-backend" font-size="8" text-anchor="middle">改写阵营</text>
         </g>
@@ -5098,7 +5098,7 @@
           <rect x="289.2" y="390.5" width="91.6" height="14" rx="3" class="c-mask"/>
           <text x="335" y="400.5" class="t-messagebus" font-size="8" text-anchor="middle">CreateNodeWarzone</text>
         </g>
-        <g data-detail="context" data-edge-from="cfg" data-edge-to="wargame" data-edge-label="占领参数" data-edge-key="6" data-edge-id="config">
+        <g data-detail="context" data-edge-from="cfg" data-edge-to="nodeLJYS" data-edge-label="占领参数" data-edge-key="6" data-edge-id="config">
           <rect x="670.8" y="390.5" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="695" y="400.5" class="t-messagebus" font-size="8" text-anchor="middle">占领参数</text>
         </g>
@@ -5114,11 +5114,11 @@
           <rect x="474" y="128" width="82" height="14" rx="3" class="c-mask"/>
           <text x="515" y="138" class="t-muted" font-size="8" text-anchor="middle">注册 5 个数据包</text>
         </g>
-        <g data-detail="context" data-edge-from="registry" data-edge-to="wargame" data-edge-label="注册 Tick 监听" data-edge-key="10" data-edge-id="register-service">
+        <g data-detail="context" data-edge-from="registry" data-edge-to="nodeLJYS" data-edge-label="注册 Tick 监听" data-edge-key="10" data-edge-id="register-service">
           <rect x="836.4" y="128" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="875" y="138" class="t-muted" font-size="8" text-anchor="middle">注册 Tick 监听</text>
         </g>
-        <g data-detail="context" data-edge-from="wargame" data-edge-to="teamdata" data-edge-label="读队伍 / 盟友" data-edge-key="11" data-edge-id="read-teams">
+        <g data-detail="context" data-edge-from="nodeLJYS" data-edge-to="teamdata" data-edge-label="读队伍 / 盟友" data-edge-key="11" data-edge-id="read-teams">
           <rect x="838.8" y="338" width="72.4" height="14" rx="3" class="c-mask"/>
           <text x="875" y="348" class="t-muted" font-size="8" text-anchor="middle">读队伍 / 盟友</text>
         </g>

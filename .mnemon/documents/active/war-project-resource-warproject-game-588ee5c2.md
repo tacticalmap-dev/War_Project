@@ -4,6 +4,38 @@ title: "War Project 增量交接：资源经济（resource 模块）与全局游
 description: "War Project 中新增的资源经济与游戏生命周期：/warproject game start|stop|end 属全局指令与全局内核 module/GameStateService（不属任何模块）、node 只存 60s 产出量、resource 模块按可配间隔结算给归属队伍、ENDED 清空资源并重置全部 node 为 neutral、协议号升至 2、构建需禁用 ForgeGradle 证书校验。改动 game/资源/占点门控前读此文档；模块总览见 3d31dded-b45f-4f11-a183-0d1aa78e4faa。"
 status: "active"
 created_at: "2026-09-19T03:37:29.977Z"
+updated_at: "2026-09-19T19:33:38.595Z"
+content_hash: "fb0f6b292ab070186a8b3cc6aa33677cea579d73686b1287f8a591af0fe3cae8"
+source_paths:
+  - "src/main/java/com/flowingsun/war_project/module/GamePhase.java"
+  - "src/main/java/com/flowingsun/war_project/module/GameStateService.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceData.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceService.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceApi.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceModule.java"
+  - "src/main/java/com/flowingsun/war_project/WarProject.java"
+  - "src/main/java/com/flowingsun/war_project/Config.java"
+  - "src/main/java/com/flowingsun/war_project/map/MapData.java"
+  - "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSModule.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeOccupationService.java"
+  - "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
+  - "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java"
+  - "src/main/java/com/flowingsun/war_project/client/ClientMapState.java"
+session_ids:
+  - "efb678ea-7cec-4f86-93bc-369b568eabcc"
+  - "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
+memory_body_ids:
+  []
+---
+
+---
+id: "588ee5c2-515b-4c80-9d4a-fb8d4bb766c2"
+title: "War Project 增量交接：资源经济（resource 模块）与全局游戏生命周期（/warproject game）"
+description: "War Project 中新增的资源经济与游戏生命周期：/warproject game start|stop|end 属全局指令与全局内核 module/GameStateService（不属任何模块）、node 只存 60s 产出量、resource 模块按可配间隔结算给归属队伍、ENDED 清空资源并重置全部 node 为 neutral、协议号升至 2、构建需禁用 ForgeGradle 证书校验。改动 game/资源/占点门控前读此文档；模块总览见 3d31dded-b45f-4f11-a183-0d1aa78e4faa。"
+status: "active"
+created_at: "2026-09-19T03:37:29.977Z"
 updated_at: "2026-09-19T03:37:29.977Z"
 content_hash: "c0299b58073fe7680c910511261d8860a8a6bc7f1c8fd03baa21e1a60809696f"
 source_paths:
@@ -17,9 +49,9 @@ source_paths:
   - "src/main/java/com/flowingsun/war_project/Config.java"
   - "src/main/java/com/flowingsun/war_project/map/MapData.java"
   - "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java"
-  - "src/main/java/com/flowingsun/war_project/wargame/WargameService.java"
-  - "src/main/java/com/flowingsun/war_project/wargame/WargameModule.java"
-  - "src/main/java/com/flowingsun/war_project/wargame/NodeOccupationService.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSModule.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeOccupationService.java"
   - "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
   - "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java"
   - "src/main/java/com/flowingsun/war_project/client/ClientMapState.java"
@@ -44,7 +76,7 @@ memory_body_ids:
 
 | 决策 | 取值 |
 | --- | --- |
-| `/warproject game ...` 归属 | **全局**：属于全局命令树（`command/WarProjectCommands`，单一注册点）与全局内核 `module/GamePhase` + `module/GameStateService`，**不得归属任何业务模块**；resource/wargame 只订阅阶段变化并在各自包内反应 |
+| `/warproject game ...` 归属 | **全局**：属于全局命令树（`command/WarProjectCommands`，单一注册点）与全局内核 `module/GamePhase` + `module/GameStateService`，**不得归属任何业务模块**；resource/nodeLJYS 只订阅阶段变化并在各自包内反应 |
 | 阶段持久化 | **不落盘**：每次开服一律 STOPPED，需管理员 `game start` |
 | 资源持久化 | **落盘**：`war_project_resources`，重启后队伍存量保留 |
 | `game end` 语义 | 清空全部队伍资源 **且** 把所有 node 阵营重置为 `neutral`（并清占领进度/意图） |
@@ -69,10 +101,10 @@ memory_body_ids:
 - **map 侧（对应需求「只负责设置数值」）**
   - `MapData.Node` 增加 `double resourcePerMinute`（NBT `resource_per_minute`），`withIdentity`/`withFaction` 保留该值；新增 `withResourceOutput`、`setNodeResourceOutput(nodeId, perMinute)`、`resetAllNodeFactions()`（同时把镜像 warzone 置 neutral，有改动才 setDirty）。
   - `MapDivideStateApi.setNodeResourceOutput(...)` 写成功即 `broadcastMap`；`resetAllNodeFactions(server)` 改动数 > 0 才广播一次。
-- **wargame 侧**
-  - `WargameService.onServerTick` 与 `submitCaptureIntent` 增加 `GameStateService.active().isRunning()` 门控（STOPPED 冻结推进与回退，且不再累积意图）。
+- **nodeLJYS 侧**
+  - `NodeLJYSService.onServerTick` 与 `submitCaptureIntent` 增加 `GameStateService.active().isRunning()` 门控（STOPPED 冻结推进与回退，且不再累积意图）。
   - `onGamePhaseChanged(..., ENDED)` → `MapDivideStateApi.resetAllNodeFactions` + `NodeOccupationService.clearAll()` + `intents.clear()`。
-  - `NodeOccupationService.clearAll()` 返回移除条数；`WargameModule` 持有稳定 listener 字段注册/移除。
+  - `NodeOccupationService.clearAll()` 返回移除条数；`NodeLJYSModule` 持有稳定 listener 字段注册/移除。
 
 ## 3. 阶段状态机
 
@@ -140,3 +172,5 @@ memory_body_ids:
 ## 10. 已同步文档
 
 仓库内 `docs/ARCHITECTURE.md` 已更新（模块表、目录树、主流程图、指令树、SavedData 与配置清单、主流程第 6–8 步），与本文一致；`docs/architecture.html|json` 未重新生成。
+
+> 模块改名注记（2026-09-20）：文中 `wargame` / `Wargame*` 已于该日更名为 `nodeLJYS` / `NodeLJYS*`（`NodeLJYSModule` 的 id 为 `"nodeLJYS"`），本文引用名已同步更新；本文其余内容为改名前的交接记录。

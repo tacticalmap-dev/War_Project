@@ -5,6 +5,8 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 
+import java.util.List;
+
 @Mod.EventBusSubscriber(modid = WarProject.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class Config {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
@@ -37,6 +39,37 @@ public final class Config {
             .comment("Enable resource settlement debug logging.")
             .define("resourceDebugMode", false);
 
+    private static final ForgeConfigSpec.DoubleValue OUT_OF_MAP_RETURN_SECONDS = BUILDER
+            .comment("Seconds a player may stay outside the map area before being killed.")
+            .defineInRange("outOfMapReturnSeconds", 30.0D, 1.0D, 3600.0D);
+
+    private static final ForgeConfigSpec.DoubleValue TRANSFER_COOLDOWN_SECONDS = BUILDER
+            .comment("Seconds a player must wait between two resource transfers (0 disables the cooldown).")
+            .defineInRange("transferCooldownSeconds", 120.0D, 0.0D, 86400.0D);
+
+    private static final ForgeConfigSpec.DoubleValue TRANSFER_MAX_AMMO = BUILDER
+            .comment("Maximum ammo a single transfer may send.")
+            .defineInRange("transferMaxAmmoPerRequest", 50.0D, 1.0D, 999.0D);
+
+    private static final ForgeConfigSpec.DoubleValue TRANSFER_MAX_FUEL = BUILDER
+            .comment("Maximum fuel a single transfer may send.")
+            .defineInRange("transferMaxFuelPerRequest", 25.0D, 1.0D, 999.0D);
+
+    private static final ForgeConfigSpec.ConfigValue<String> WEB_RENDERER = BUILDER
+            .comment("Which backend draws the resource island and the transfer panel.",
+                    "auto     - use Chromium when it is available, otherwise the built in HTML renderer",
+                    "native   - always use the built in HTML renderer",
+                    "chromium - request Chromium; the built in renderer still takes over if it cannot start")
+            .defineInList("webRenderer", "auto", List.of("auto", "native", "chromium"));
+
+    private static final ForgeConfigSpec.ConfigValue<String> CEF_MIRROR = BUILDER
+            .comment("Download mirror for the Chromium Embedded Framework binaries; empty uses the public build host.")
+            .define("cefMirror", "");
+
+    private static final ForgeConfigSpec.BooleanValue WEB_DIAGNOSTICS = BUILDER
+            .comment("Log Chromium surface diagnostics (frames, uploads, frame time) every 60 seconds.")
+            .define("webDiagnostics", false);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static double nodeCaptureBaseSeconds;
@@ -46,6 +79,13 @@ public final class Config {
     public static boolean captureDebugMode;
     public static double resourceSettleIntervalSeconds = 5.0D;
     public static boolean resourceDebugMode;
+    public static double outOfMapReturnSeconds = 30.0D;
+    public static double transferCooldownSeconds = 120.0D;
+    public static double transferMaxAmmoPerRequest = 50.0D;
+    public static double transferMaxFuelPerRequest = 25.0D;
+    public static String webRenderer = "auto";
+    public static String cefMirror = "";
+    public static boolean webDiagnostics;
 
     private Config() {
     }
@@ -59,5 +99,12 @@ public final class Config {
         captureDebugMode = CAPTURE_DEBUG_MODE.get();
         resourceSettleIntervalSeconds = RESOURCE_SETTLE_INTERVAL_SECONDS.get();
         resourceDebugMode = RESOURCE_DEBUG_MODE.get();
+        outOfMapReturnSeconds = OUT_OF_MAP_RETURN_SECONDS.get();
+        transferCooldownSeconds = TRANSFER_COOLDOWN_SECONDS.get();
+        transferMaxAmmoPerRequest = TRANSFER_MAX_AMMO.get();
+        transferMaxFuelPerRequest = TRANSFER_MAX_FUEL.get();
+        webRenderer = WEB_RENDERER.get();
+        cefMirror = CEF_MIRROR.get();
+        webDiagnostics = WEB_DIAGNOSTICS.get();
     }
 }

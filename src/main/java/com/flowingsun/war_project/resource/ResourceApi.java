@@ -1,5 +1,7 @@
 package com.flowingsun.war_project.resource;
 
+import com.flowingsun.war_project.Config;
+
 import com.flowingsun.war_project.map.MapData;
 import com.flowingsun.war_project.module.GameStateService;
 import com.flowingsun.war_project.net.WarProjectNetwork;
@@ -141,6 +143,36 @@ public final class ResourceApi {
     }
 
     /**
+     * Timestamp of the last accepted transfer per sender. Deliberately in memory only: it is a pacing
+     * rule for the current session, exactly like the game phase, and a restart resets it.
+     */
+    private static final java.util.Map<java.util.UUID, Long> LAST_TRANSFER_AT = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Largest amount one transfer may send for the given kind. */
+    public static double transferLimit(ResourceKind kind) {
+        return kind == ResourceKind.FUEL ? Config.transferMaxFuelPerRequest : Config.transferMaxAmmoPerRequest;
+    }
+
+    /** Configured cooldown between transfers, in seconds. */
+    public static double transferCooldownSeconds() {
+        return Math.max(0.0D, Config.transferCooldownSeconds);
+    }
+
+    /** Seconds the player still has to wait, or 0 when the next transfer is allowed. */
+    public static double cooldownRemaining(ServerPlayer player) {
+        double cooldown = transferCooldownSeconds();
+        if (cooldown <= 0.0D || player == null) {
+            return 0.0D;
+        }
+        Long last = LAST_TRANSFER_AT.get(player.getUUID());
+        if (last == null) {
+            return 0.0D;
+        }
+        double elapsed = (System.currentTimeMillis() - last) / 1000.0D;
+        return Math.max(0.0D, cooldown - elapsed);
+    }
+
+    /**
      * Moves resources from {@code sender} to the online player {@code targetName}. Every gameplay
      * rule lives here so the command and the UI packet cannot diverge: RUNNING phase, same team,
      * sender balance, and the receiver's 999 ceiling (the whole transfer is rejected on overflow).
@@ -172,6 +204,15 @@ public final class ResourceApi {
         if (senderTeam == null || !senderTeam.equals(receiverTeam)) {
             return new TransferOutcome(false, target + " is not in your team.");
         }
+        double limit = transferLimit(kind);
+        if (amount > limit) {
+            return new TransferOutcome(false, "You can send at most " + format(limit) + " " + kind.id()
+                    + " in one transfer.");
+        }
+        double remaining = cooldownRemaining(sender);
+        if (remaining > 0.0D) {
+            return new TransferOutcome(false, "Transfer is cooling down (" + (long) Math.ceil(remaining) + " s left).");
+        }
         ResourceData data = ResourceData.get(server);
         double balance = data.amount(senderName, kind);
         if (balance < amount) {
@@ -186,6 +227,7 @@ public final class ResourceApi {
             return new TransferOutcome(false, "Transfer failed: your balance changed.");
         }
         data.addAmount(target, kind, amount);
+        LAST_TRANSFER_AT.put(sender.getUUID(), System.currentTimeMillis());
         sendSync(sender);
         sendSync(receiver);
         String text = format(amount) + " " + kind.id();

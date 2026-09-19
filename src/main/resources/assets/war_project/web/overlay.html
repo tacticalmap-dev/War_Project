@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; color: #fff;
+    -webkit-font-smoothing: antialiased; font-size: 7px; }
+  .stack { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center; }
+  /* One black slab: collapsed it is the island bar, expanded it grows downwards into the roster. */
+  /* Collapsed the slab hugs its content (the width is measured in script so it can still animate);
+     expanded it becomes the panel. */
+  .slab { position: relative; box-sizing: border-box; width: max-content; height: 18px;
+    border-radius: 9px; overflow: hidden;
+    background: #000000f0; border: 1px solid #ffffff1f;
+    opacity: 0; transition: opacity .16s ease, width .22s cubic-bezier(.2,.8,.25,1),
+      height .22s cubic-bezier(.2,.8,.25,1), border-radius .22s ease; }
+  .slab.shown { opacity: 1; }
+  .slab.open { width: 206px; height: 196px; border-radius: 10px; }
+  /* Symmetric side padding keeps the bar visually balanced: without it the content sat flush against
+     both edges and the text side bearings made the right end read shorter. */
+  .bar { height: 16px; display: flex; align-items: center; justify-content: center; gap: 3px;
+    padding: 0 7px; box-sizing: border-box; font-size: 7px; line-height: 1; white-space: nowrap; }
+  .icon { width: 12px; height: 12px; display: block; }
+  .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rate { color: #7ce38b; font-variant-numeric: tabular-nums; }
+  .sep { width: 1px; height: 10px; background: #ffffff26; margin: 0 1px; }
+  /* Absolutely positioned so it never contributes to the slab's intrinsic (max-content) width: the
+     collapsed slab must hug the island numbers only. */
+  .body { position: absolute; left: 0; right: 0; top: 16px; bottom: 0; display: flex; flex-direction: column;
+    gap: 4px; padding: 4px 8px 8px 8px; box-sizing: border-box; opacity: 0; transition: opacity .14s ease; }
+  .slab.open .body { opacity: 1; transition: opacity .18s ease .07s; }
+  .head { display: flex; align-items: center; justify-content: space-between; font-size: 8px; font-weight: 600; }
+  .sub { font-size: 7px; color: #9fb0c6; font-weight: 400; }
+  .roster { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+  .roster::-webkit-scrollbar { width: 4px; }
+  .roster::-webkit-scrollbar-thumb { background: #ffffff2e; border-radius: 2px; }
+  .row { display: flex; align-items: center; gap: 5px; padding: 2px 5px; border-radius: 5px;
+    cursor: pointer; transition: background .12s ease; }
+  .row:hover { background: #ffffff1a; }
+  .row.sel { background: #ffffff26; box-shadow: inset 0 0 0 1px #ffffff59; }
+  .row.off { opacity: .4; cursor: default; }
+  .name { flex: 1; }
+  .val { color: #b9c6d6; font-size: 7px; font-variant-numeric: tabular-nums; }
+  .entry { display: flex; align-items: center; gap: 5px; }
+  .label { color: #9fb0c6; font-size: 7px; }
+  input { flex: 1; min-width: 0; box-sizing: border-box; background: #ffffff12; border: 1px solid #ffffff26;
+    border-radius: 5px; color: #fff; padding: 2px 5px; font-size: 7px; outline: none; font-family: inherit;
+    font-variant-numeric: tabular-nums; }
+  input:focus { border-color: #ffffff59; }
+  .actions { display: flex; gap: 5px; }
+  button { flex: 1; border: 1px solid #ffffff1f; border-radius: 6px; padding: 4px 6px; font-size: 7px;
+    color: #fff; background: #ffffff12; cursor: pointer; font-family: inherit; transition: background .12s ease; }
+  button:hover { background: #ffffff26; }
+  button.primary { background: #2b7ffb; border-color: #2b7ffb; }
+  button.primary:hover { background: #3f8dfd; }
+  button:disabled { opacity: .45; cursor: default; background: #ffffff0d; border-color: #ffffff14; }
+  .result { min-height: 11px; font-size: 7px; color: #9fb0c6; }
+  .result.ok { color: #7ce38b; }
+  .result.fail { color: #ff9a9a; }
+</style>
+</head>
+<body>
+<div class="stack">
+  <div id="slab" class="slab">
+    <div class="bar">
+      <img id="ammoIcon" class="icon" src="__AMMO_ICON__" alt="">
+      <span id="ammo" class="amount">0</span><span id="ammoRate" class="rate">+0</span>
+      <div class="sep"></div>
+      <img id="fuelIcon" class="icon" src="__FUEL_ICON__" alt="">
+      <span id="fuel" class="amount">0</span><span id="fuelRate" class="rate">+0</span>
+    </div>
+    <div class="body">
+      <div class="head"><span id="title">转移</span><span id="held" class="sub"></span></div>
+      <div id="roster" class="roster"></div>
+      <div class="entry">
+        <span class="label">数量</span>
+        <input id="amount" type="text" inputmode="numeric" value="1">
+        <span id="limit" class="label">上限 0</span>
+      </div>
+      <div class="actions">
+        <button id="confirm" class="primary">确认</button>
+        <button id="cancel">取消</button>
+      </div>
+      <div id="result" class="result"></div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var slab = document.getElementById('slab');
+    var roster = document.getElementById('roster');
+    var amount = document.getElementById('amount');
+    var confirmButton = document.getElementById('confirm');
+    var result = document.getElementById('result');
+    var snapshot = { teammates: [] };
+    var kind = 'ammo';
+    var barWidth = 0;
+    var selected = null;
+    var pending = false;
+    var closeTimer = 0;
+    var PANEL_WIDTH = 206;
+    var cooldownSeconds = 120;
+    var cooldownUntil = 0;
+    var cooldownTimer = 0;
+
+    function translate(message) {
+      if (!message) { return ''; }
+      // Each rule must match the WHOLE sentence: replacing only the matched fragment leaves English
+      // around the Chinese text (seen in testing as "Transfer is 冷却中，还需 42 秒。 left).").
+      var rules = [
+        [/^.*unknown resource kind.*$/i, '未知的资源类型。'],
+        [/^.*paused.*$/i, '游戏未开始，转移已暂停。'],
+        [/^.*greater than 0.*$/i, '数量必须大于 0。'],
+        [/^.*pick a teammate.*$/i, '请先选择一名队友。'],
+        [/^.*is not online.*$/i, '对方不在线。'],
+        [/^.*is not in your team.*$/i, '对方不在你的队伍中。'],
+        [/^.*not enough.*\(you have ([0-9.]+)\).*$/i, '你的余额不足（当前 $1）。'],
+        [/^.*can only receive ([0-9.]+).*$/i, '对方最多只能再接收 $1。'],
+        [/^.*balance changed.*$/i, '余额发生变化，请重试。'],
+        [/^.*cooling down.*?([0-9]+)\s*s.*$/i, '冷却中，还需 $1 秒。'],
+        [/^.*at most ([0-9.]+).*$/i, '单次最多 $1。']
+      ];
+      for (var i = 0; i < rules.length; i++) {
+        if (rules[i][0].test(message)) {
+          return message.replace(rules[i][0], rules[i][1]);
+        }
+      }
+      return message;
+    }
+
+    function cooldownLeft() {
+      return Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+    }
+
+    function startCooldownTimer() {
+      if (cooldownTimer) { return; }
+      cooldownTimer = window.setInterval(function () {
+        if (cooldownLeft() > 0) {
+          render();
+        } else {
+          window.clearInterval(cooldownTimer);
+          cooldownTimer = 0;
+          render();
+        }
+      }, 1000);
+    }
+
+    function query(payload) {
+      try {
+        if (typeof cefQuery === 'function') {
+          cefQuery({ request: JSON.stringify(payload), onSuccess: function () { }, onFailure: function () { } });
+        }
+      } catch (error) { /* not inside Chromium */ }
+    }
+
+    function stockOf(member) { return kind === 'fuel' ? member.fuel : member.ammo; }
+    function rateOf() { return kind === 'fuel' ? snapshot.fuelRate : snapshot.ammoRate; }
+    function heldOf() { return kind === 'fuel' ? snapshot.fuel : snapshot.ammo; }
+    function kindName() { return kind === 'fuel' ? '燃料' : '弹药'; }
+    function selectedMember() {
+      for (var i = 0; i < snapshot.teammates.length; i++) {
+        if (snapshot.teammates[i].name === selected) { return snapshot.teammates[i]; }
+      }
+      return null;
+    }
+    function kindLimit() {
+      var value = kind === 'fuel' ? snapshot.maxFuel : snapshot.maxAmmo;
+      return value > 0 ? value : (kind === 'fuel' ? 25 : 50);
+    }
+
+    function maxAmount() {
+      var limit = Math.min(heldOf(), kindLimit());
+      var member = selectedMember();
+      if (member) { limit = Math.min(limit, 999 - stockOf(member)); }
+      return Math.max(0, Math.min(999, limit));
+    }
+
+    // Collapsed width in CSS pixels, measured without disturbing the current width. The panel body is
+    // absolutely positioned, so max-content here is always the island bar alone.
+    function measureBarWidth() {
+      var previous = slab.style.width;
+      slab.style.transition = 'none';
+      slab.style.width = 'max-content';
+      var width = Math.ceil(slab.getBoundingClientRect().width);
+      slab.style.width = previous;
+      void slab.offsetWidth;
+      slab.style.transition = '';
+      return width;
+    }
+
+    // Pins the collapsed width to pixels (the browser cannot animate to max-content) and tells the Java
+    // side where the clickable bar is.
+    function fitBar() {
+      if (slab.classList.contains('open')) { return; }
+      var width = measureBarWidth();
+      slab.style.transition = 'none';
+      slab.style.width = width + 'px';
+      void slab.offsetWidth;
+      slab.style.transition = '';
+      if (width !== barWidth) {
+        barWidth = width;
+        query({ op: 'size', bar: width });
+      }
+    }
+
+    function render() {
+      document.getElementById('title').textContent = '转移' + kindName();
+      document.getElementById('held').textContent = '持有 ' + heldOf() + ' · +' + rateOf() + '/分';
+      roster.innerHTML = '';
+      if (!snapshot.teammates.length) {
+        var empty = document.createElement('div');
+        empty.className = 'row off';
+        empty.textContent = '没有在线队友';
+        roster.appendChild(empty);
+      }
+      snapshot.teammates.forEach(function (member) {
+        var row = document.createElement('div');
+        row.className = 'row' + (member.name === selected ? ' sel' : '') + (member.online ? '' : ' off');
+        var name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = member.name + (member.online ? '' : '（离线）');
+        var values = document.createElement('div');
+        values.className = 'val';
+        values.textContent = '弹 ' + member.ammo + ' · 燃 ' + member.fuel;
+        row.appendChild(name);
+        row.appendChild(values);
+        if (member.online) {
+          row.addEventListener('click', function () {
+            selected = member.name;
+            amount.value = '1';
+            render();
+          });
+        }
+        roster.appendChild(row);
+      });
+      var limit = maxAmount();
+      document.getElementById('limit').textContent = '上限 ' + limit;
+      var value = parseInt(amount.value, 10);
+      if (isNaN(value) || value < 1) { amount.value = limit > 0 ? '1' : '0'; }
+      var cooling = cooldownLeft();
+      confirmButton.disabled = pending || cooling > 0 || !selected || maxAmount() <= 0;
+      confirmButton.textContent = cooling > 0 ? ('冷却 ' + cooling + 's') : '确认';
+    }
+
+    function submit() {
+      if (pending || !selected) { return; }
+      var value = parseInt(amount.value, 10);
+      var limit = maxAmount();
+      if (isNaN(value) || value < 1 || value > limit) {
+        result.className = 'result fail';
+        result.textContent = '请输入 1 到 ' + limit + ' 之间的数量（单次上限 ' + kindLimit() + '）。';
+        return;
+      }
+      pending = true;
+      result.className = 'result';
+      result.textContent = '正在向 ' + selected + ' 转移 ' + value + ' ' + kindName() + '…';
+      confirmButton.disabled = true;
+      query({ op: 'transfer', target: selected, kind: kind, amount: value });
+    }
+
+    function cancel() {
+      pending = false;
+      query({ op: 'cancel' });
+    }
+
+    window.wp = {
+      apply: function (next) {
+        snapshot = next;
+        var visible = !!(next.running && next.hasTeam);
+        slab.classList.toggle('shown', visible);
+        if (!visible) { slab.classList.remove('open'); }
+        document.getElementById('ammo').textContent = next.ammo;
+        document.getElementById('ammoRate').textContent = '+' + next.ammoRate;
+        document.getElementById('fuel').textContent = next.fuel;
+        document.getElementById('fuelRate').textContent = '+' + next.fuelRate;
+        render();
+        fitBar();
+      },
+      openPanel: function (options) {
+        kind = options.kind === 'fuel' ? 'fuel' : 'ammo';
+        cooldownSeconds = parseFloat(options.cooldown);
+        if (!(cooldownSeconds > 0)) { cooldownSeconds = 120; }
+        cooldownUntil = 0;
+        selected = null;
+        pending = false;
+        result.className = 'result';
+        result.textContent = '';
+        if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = 0; }
+        // Start the growth from the measured collapsed width so both directions animate.
+        var collapsed = barWidth > 0 ? barWidth : measureBarWidth();
+        slab.style.transition = 'none';
+        slab.style.width = collapsed + 'px';
+        void slab.offsetWidth;
+        slab.style.transition = '';
+        slab.classList.add('on');
+        slab.classList.add('shown');
+        slab.classList.add('open');
+        slab.style.width = '';
+        amount.value = '1';
+        render();
+        amount.focus();
+        amount.select();
+      },
+      closePanel: function () {
+        if (!slab.classList.contains('open')) {
+          pending = false;
+          return;
+        }
+        // Shrink with animation: pin the expanded width first, because a pixel width cannot be
+        // interpolated to max-content (that jump is why the collapse used to snap).
+        var collapsed = barWidth > 0 ? barWidth : measureBarWidth();
+        slab.style.width = PANEL_WIDTH + 'px';
+        void slab.offsetWidth;
+        slab.classList.remove('open');
+        slab.style.width = collapsed + 'px';
+        pending = false;
+        result.className = 'result';
+        result.textContent = '';
+        if (cooldownTimer) { window.clearInterval(cooldownTimer); cooldownTimer = 0; }
+        window.setTimeout(function () { fitBar(); }, 260);
+      },
+      result: function (outcome) {
+        pending = false;
+        if (outcome.ok) {
+          result.className = 'result ok';
+          result.textContent = '已向 ' + selected + ' 转移 ' + amount.value + ' ' + kindName() + '。';
+          if (cooldownSeconds > 0) {
+            cooldownUntil = Date.now() + cooldownSeconds * 1000;
+            startCooldownTimer();
+          }
+          render();
+          closeTimer = window.setTimeout(function () { query({ op: 'close' }); }, 900);
+          return;
+        }
+        result.className = 'result fail';
+        result.textContent = translate(outcome.message);
+        // Server refused because of the cooldown: adopt its remaining time so the button counts down too.
+        var left = /cooling down.*?([0-9]+)\s*s/i.exec(outcome.message || '');
+        if (left) {
+          cooldownUntil = Date.now() + parseInt(left[1], 10) * 1000;
+          startCooldownTimer();
+        }
+        render();
+      }
+    };
+
+    fitBar();
+    confirmButton.addEventListener('click', submit);
+    document.getElementById('cancel').addEventListener('click', cancel);
+    amount.addEventListener('input', function () {
+      amount.value = amount.value.replace(/[^0-9]/g, '').slice(0, 3);
+    });
+    amount.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); submit(); }
+      if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+    });
+  })();
+</script>
+</body>
+</html>

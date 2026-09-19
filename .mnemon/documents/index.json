@@ -9,30 +9,21 @@
       "filename": "war-project-war-project-3d31dded.md",
       "relativePath": "documents/active/war-project-war-project-3d31dded.md",
       "sourcePaths": [
-        "build.gradle",
-        "src/main/java/com/flowingsun/war_project/WarProject.java",
-        "src/main/java/com/flowingsun/war_project/module/ModuleRegistry.java",
-        "src/main/java/com/flowingsun/war_project/map/MapData.java",
-        "src/main/java/com/flowingsun/war_project/team/TeamData.java",
-        "src/main/java/com/flowingsun/war_project/wargame/WargameService.java",
-        "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
-        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
-        "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java",
-        "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java",
-        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
-        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java",
-        "src/main/resources/mixins.war_project.json",
-        "src/main/resources/META-INF/mods.toml"
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java",
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSModule.java",
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeOccupationService.java",
+        "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java"
       ],
       "sessionIds": [
-        "ad314282-4cef-4ea8-b96a-432f0104bd14"
+        "ad314282-4cef-4ea8-b96a-432f0104bd14",
+        "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
       ],
       "createdAt": "2026-09-12T07:03:48.002Z",
-      "updatedAt": "2026-09-12T07:03:48.002Z",
-      "lastAccessedAt": "2026-09-19T07:22:08.138Z",
-      "revision": 1,
-      "contentHash": "a665cea8fcd98491345f0b9520449cf956d038322f70afb8e2cced563a191cc7",
-      "sizeBytes": 11473,
+      "updatedAt": "2026-09-19T19:33:22.544Z",
+      "lastAccessedAt": "2026-09-19T21:02:00.252Z",
+      "revision": 2,
+      "contentHash": "f2ef68585f5d83ad910289107cd7ef9a59d48da1933645e641af5381523fb3bf",
+      "sizeBytes": 13341,
       "memoryBodyIds": []
     },
     {
@@ -55,7 +46,7 @@
       ],
       "createdAt": "2026-09-12T11:54:24.005Z",
       "updatedAt": "2026-09-12T11:54:24.005Z",
-      "lastAccessedAt": "2026-09-19T06:55:17.674Z",
+      "lastAccessedAt": "2026-09-19T19:10:24.382Z",
       "revision": 1,
       "contentHash": "5bb9b601c598c4d9f7ea5984815a32ec4711f201afdf9f677bda2d95c363883c",
       "sizeBytes": 9176,
@@ -80,7 +71,7 @@
       ],
       "createdAt": "2026-09-18T17:35:49.645Z",
       "updatedAt": "2026-09-18T17:35:49.645Z",
-      "lastAccessedAt": "2026-09-19T07:16:07.200Z",
+      "lastAccessedAt": "2026-09-19T20:19:16.433Z",
       "revision": 1,
       "contentHash": "be8538bfcd5b0948113156975b574ad9fa808ed4bca6f47a8cc8a22440a8a700",
       "sizeBytes": 9597,
@@ -107,7 +98,7 @@
       ],
       "createdAt": "2026-09-18T18:29:31.326Z",
       "updatedAt": "2026-09-18T18:29:31.326Z",
-      "lastAccessedAt": "2026-09-19T06:54:03.296Z",
+      "lastAccessedAt": "2026-09-19T21:02:00.252Z",
       "revision": 1,
       "contentHash": "1303c7a908fd0d9cddeefaab526a26eb1c68f9c9b931ad189dcabd7167c382b8",
       "sizeBytes": 11428,
@@ -133,7 +124,7 @@
       ],
       "createdAt": "2026-09-18T20:01:24.183Z",
       "updatedAt": "2026-09-18T20:01:24.183Z",
-      "lastAccessedAt": "2026-09-18T20:53:15.744Z",
+      "lastAccessedAt": "2026-09-19T19:10:24.382Z",
       "revision": 1,
       "contentHash": "32d2b857f93b891067a2a4f72a8b173d7fbe050aba753fe39fef5466ebc94f60",
       "sizeBytes": 8749,
@@ -237,7 +228,7 @@
       ],
       "createdAt": "2026-09-18T20:53:46.236Z",
       "updatedAt": "2026-09-18T20:53:46.236Z",
-      "lastAccessedAt": "2026-09-19T05:36:05.677Z",
+      "lastAccessedAt": "2026-09-19T20:28:27.364Z",
       "revision": 1,
       "contentHash": "433ffd42145ca7042ecf2b5f14c5630aaa109e98c0e64891d7cf81cfd8319cbb",
       "sizeBytes": 10357,
@@ -251,19 +242,19 @@
       "filename": "position-color-quad-guigraphics-fill-465b774a.md",
       "relativePath": "documents/active/position-color-quad-guigraphics-fill-465b774a.md",
       "sourcePaths": [
-        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
-        "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java",
         "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java"
       ],
       "sessionIds": [
-        "f003a139-913a-4204-aa6a-3caba1ae5680"
+        "f003a139-913a-4204-aa6a-3caba1ae5680",
+        "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
       ],
       "createdAt": "2026-09-18T21:14:32.775Z",
-      "updatedAt": "2026-09-18T21:14:32.775Z",
-      "lastAccessedAt": "2026-09-19T07:16:07.200Z",
-      "revision": 1,
-      "contentHash": "c5d9ff3556af1ad83aec5007e9b1d7f5aabcf06736dbf3a3fb66a8f4663dc598",
-      "sizeBytes": 9003,
+      "updatedAt": "2026-09-19T19:33:38.649Z",
+      "lastAccessedAt": "2026-09-19T20:19:16.433Z",
+      "revision": 2,
+      "contentHash": "a2355115304a7c864175b18bfbae219801e10a97557d791facb5200c225941a4",
+      "sizeBytes": 10156,
       "memoryBodyIds": []
     },
     {
@@ -284,24 +275,23 @@
         "src/main/java/com/flowingsun/war_project/Config.java",
         "src/main/java/com/flowingsun/war_project/map/MapData.java",
         "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java",
-        "src/main/java/com/flowingsun/war_project/wargame/WargameService.java",
-        "src/main/java/com/flowingsun/war_project/wargame/WargameModule.java",
-        "src/main/java/com/flowingsun/war_project/wargame/NodeOccupationService.java",
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java",
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSModule.java",
+        "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeOccupationService.java",
         "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
         "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
-        "src/main/java/com/flowingsun/war_project/client/ClientMapState.java",
-        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java",
-        "docs/ARCHITECTURE.md"
+        "src/main/java/com/flowingsun/war_project/client/ClientMapState.java"
       ],
       "sessionIds": [
-        "efb678ea-7cec-4f86-93bc-369b568eabcc"
+        "efb678ea-7cec-4f86-93bc-369b568eabcc",
+        "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
       ],
       "createdAt": "2026-09-19T03:37:29.977Z",
-      "updatedAt": "2026-09-19T03:37:29.977Z",
-      "lastAccessedAt": "2026-09-19T18:10:03.105Z",
-      "revision": 1,
-      "contentHash": "c0299b58073fe7680c910511261d8860a8a6bc7f1c8fd03baa21e1a60809696f",
-      "sizeBytes": 12076,
+      "updatedAt": "2026-09-19T19:33:38.595Z",
+      "lastAccessedAt": "2026-09-19T19:34:40.991Z",
+      "revision": 2,
+      "contentHash": "fb0f6b292ab070186a8b3cc6aa33677cea579d73686b1287f8a591af0fe3cae8",
+      "sizeBytes": 14481,
       "memoryBodyIds": []
     },
     {
@@ -319,7 +309,7 @@
       ],
       "createdAt": "2026-09-19T05:36:26.459Z",
       "updatedAt": "2026-09-19T05:36:26.459Z",
-      "lastAccessedAt": "2026-09-19T07:16:07.200Z",
+      "lastAccessedAt": "2026-09-19T18:56:22.187Z",
       "revision": 1,
       "contentHash": "b943316003b7d6dfe9ea6a06926ede4fa31e429638bcfa19c92d82b1ec006a6e",
       "sizeBytes": 6022,
@@ -343,21 +333,18 @@
         "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
         "src/main/java/com/flowingsun/war_project/client/ResourceClientState.java",
         "src/main/java/com/flowingsun/war_project/client/ResourceHudOverlay.java",
-        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
-        "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java",
-        "src/main/resources/assets/war_project/textures/gui/ammo.png",
-        "src/main/resources/assets/war_project/textures/gui/fuel.png",
-        "docs/ARCHITECTURE.md"
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
       ],
       "sessionIds": [
-        "f2dbaa3b-c4bf-4366-9fe0-f08d000253a7"
+        "f2dbaa3b-c4bf-4366-9fe0-f08d000253a7",
+        "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
       ],
       "createdAt": "2026-09-19T06:54:30.055Z",
-      "updatedAt": "2026-09-19T06:54:30.055Z",
-      "lastAccessedAt": "2026-09-19T17:35:09.270Z",
-      "revision": 1,
-      "contentHash": "19de02f916e36a9bbfde0d111db577550fd572e0c3da0a5aab2f232fc1105b17",
-      "sizeBytes": 8440,
+      "updatedAt": "2026-09-19T19:33:38.622Z",
+      "lastAccessedAt": "2026-09-19T19:33:38.622Z",
+      "revision": 2,
+      "contentHash": "895945a3891dee4f3927ea518a0bc8f7e4746619821de03979f9f327200fe206",
+      "sizeBytes": 10303,
       "memoryBodyIds": []
     },
     {
@@ -380,7 +367,7 @@
       ],
       "createdAt": "2026-09-19T07:16:27.126Z",
       "updatedAt": "2026-09-19T07:16:27.126Z",
-      "lastAccessedAt": "2026-09-19T16:59:02.806Z",
+      "lastAccessedAt": "2026-09-19T18:56:22.187Z",
       "revision": 1,
       "contentHash": "9c4cfaa04503ded1fb50bd41541900c4edcff299b31ff69b34e64947a8d85335",
       "sizeBytes": 7852,
@@ -408,7 +395,7 @@
       ],
       "createdAt": "2026-09-19T07:22:35.289Z",
       "updatedAt": "2026-09-19T07:22:35.289Z",
-      "lastAccessedAt": "2026-09-19T18:10:03.105Z",
+      "lastAccessedAt": "2026-09-19T20:44:29.322Z",
       "revision": 1,
       "contentHash": "bcf64c9ff845faab387d58b01522a8bb8f6b25b4bf5ccee23f6642909259ea4c",
       "sizeBytes": 7617,
@@ -431,14 +418,15 @@
         "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
       ],
       "sessionIds": [
-        "28d5a581-57b2-4315-827f-b581752b73bd"
+        "28d5a581-57b2-4315-827f-b581752b73bd",
+        "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
       ],
       "createdAt": "2026-09-19T16:59:31.930Z",
-      "updatedAt": "2026-09-19T16:59:31.930Z",
-      "lastAccessedAt": "2026-09-19T18:10:03.105Z",
-      "revision": 1,
-      "contentHash": "8fc6aa999359d3d61ed681129077c8a6a3eff2422b6c71cb7b2482cb071ab015",
-      "sizeBytes": 7384,
+      "updatedAt": "2026-09-19T19:33:38.678Z",
+      "lastAccessedAt": "2026-09-19T19:33:38.678Z",
+      "revision": 2,
+      "contentHash": "eabca35c46876eb78658f3b397ce85d42ee2a204ab2fddddd4d18aec46672a48",
+      "sizeBytes": 9149,
       "memoryBodyIds": []
     },
     {
@@ -472,10 +460,293 @@
       ],
       "createdAt": "2026-09-19T17:35:34.217Z",
       "updatedAt": "2026-09-19T17:35:34.217Z",
-      "lastAccessedAt": "2026-09-19T18:10:03.105Z",
+      "lastAccessedAt": "2026-09-19T21:45:53.294Z",
       "revision": 1,
       "contentHash": "229ae496baa02b16bb5a2deb1387eb5b5d0996da7b152fb272118b2df0fa0a15",
       "sizeBytes": 12386,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "1c71271d-130d-47c6-8393-2faa5b988785",
+      "title": "War Project 增量交接：HTML 内核抗锯齿与矢量渲染（SDF 圆角 + SVG），取代逐行圆角方案",
+      "description": "接在 437db98f（个人资源 + HTML 内核首版 + 转移面板）之后的本轮增量：圆角改为解析 SDF 逐像素覆盖率（1px AA）、新增 HtmlTextures（外形/描边高光环/渐变光泽/多重与 inset 阴影/纹理缓存）与 HtmlVector（SVG 子集 4×4 超采样非零环绕光栅化）、Css 新增 border 简写与 box-shadow 列表与 linear-gradient；并明确取代旧「逐行 fill 内缩圆角」「三角扇自建顶点」「shadowSize/shadowColor 单值阴影」；含立体感视觉规范、验证手法与未决的 MCEF A/B 决策。改 HTML 内核/灵动岛样式前先读。",
+      "status": "active",
+      "filename": "war-project-html-sdf-svg-1c71271d.md",
+      "relativePath": "documents/active/war-project-html-sdf-svg-1c71271d.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/html/HtmlTextures.java",
+        "src/main/java/com/flowingsun/war_project/html/HtmlVector.java",
+        "src/main/java/com/flowingsun/war_project/html/HtmlRenderer.java",
+        "src/main/java/com/flowingsun/war_project/html/Css.java",
+        "src/main/java/com/flowingsun/war_project/html/HtmlLayout.java",
+        "src/main/resources/assets/war_project/html/resource_island.html",
+        "src/main/resources/assets/war_project/html/transfer_panel.html",
+        "src/main/java/com/flowingsun/war_project/client/ResourceIslandView.java",
+        "docs/ARCHITECTURE.md"
+      ],
+      "sessionIds": [
+        "da6ffcee-6856-4e01-804b-d0a96db42d80"
+      ],
+      "createdAt": "2026-09-19T18:53:15.148Z",
+      "updatedAt": "2026-09-19T18:53:15.148Z",
+      "lastAccessedAt": "2026-09-19T21:45:53.294Z",
+      "revision": 1,
+      "contentHash": "e116994562de313d79a53bb9d682bd9f1af69c8fbeb76b9f2596b11dd13763d8",
+      "sizeBytes": 13802,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "21dce6fc-d9f3-402f-9213-91f18c0235a6",
+      "title": "War Project 地图边界子系统：世界边界退场 → 黄色边界墙 + 地图界外红雾 + 越界处决",
+      "description": "用户定调的地图区域规则与落地依据：Bounds 数据层（MapData NBT 段、主世界限定、半开区间）、世界里自绘黄色条纹墙（状态与顶点逐条对齐 LevelRenderer.renderWorldBorder 字节码）、Xaero 世界地图（轴对齐 4 条）与旋转小地图（4 角投影 + 逐行扫描）的界外红雾两种算法、越界计时与 kill 的服务端权威设计（协议号 7 的 OutOfMapWarningPacket + 客户端本地倒数）。改边界渲染或越界规则前读本文；Xaero 叠加层几何口径另见 5ea0e65d 与 dbb656b9。",
+      "status": "active",
+      "filename": "war-project-21dce6fc.md",
+      "relativePath": "documents/active/war-project-21dce6fc.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/map/MapData.java",
+        "src/main/java/com/flowingsun/war_project/map/MapBoundaryService.java",
+        "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java",
+        "src/main/java/com/flowingsun/war_project/map/MapDivideModule.java",
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
+        "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
+        "src/main/java/com/flowingsun/war_project/Config.java",
+        "src/main/java/com/flowingsun/war_project/client/ClientMapState.java",
+        "src/main/java/com/flowingsun/war_project/client/OutOfMapClientState.java",
+        "src/main/java/com/flowingsun/war_project/client/OutOfMapHudOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/MapBoundaryRenderer.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroMinimapOverlay.java",
+        "docs/ARCHITECTURE.md"
+      ],
+      "sessionIds": [
+        "3244defe-3747-4ce9-ba33-7def5ed0bc8c"
+      ],
+      "createdAt": "2026-09-19T19:10:45.460Z",
+      "updatedAt": "2026-09-19T19:10:45.460Z",
+      "lastAccessedAt": "2026-09-19T20:28:27.364Z",
+      "revision": 1,
+      "contentHash": "3ec4bd5a27d0d8953b985542dff5378dcb4e23c8e17d0cdd1b2fff3adc0244b2",
+      "sizeBytes": 14100,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "dfbfbd61-6898-492a-800c-55356cf596b3",
+      "title": "War Project 增量交接：自建 Chromium(CEF) 渲染后端（下载/引导/OSR 上传/输入/回退）",
+      "description": "接在 1c71271d（HTML 内核 SDF+SVG）之后：用户定调「参考 MCEF 做法、在本 mod 内自建」；含 java-cef 源码入库、CEF 二进制自建下载管线（实证 URL/commit/119 MiB）、jcef.path+每 tick N_DoMessageLoopWork 引导、OSR 预乘 BGRA → GL_BGRA/UNSIGNED_INT_8_8_8_8_REV 上传 + ONE/ONE_MINUS_SRC_ALPHA 混合、cefQuery 通道、data: URL 编码陷阱、后端抽象与回退触发、离线 probe 验证法与游戏目录预置位置。改渲染后端、诊断 Chromium 或接新页面前先读。",
+      "status": "active",
+      "filename": "war-project-chromium-cef-osr-dfbfbd61.md",
+      "relativePath": "documents/active/war-project-chromium-cef-osr-dfbfbd61.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/client/cef/CefNatives.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefBootstrap.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefOsrView.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/WpCefBrowser.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefTexture.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefWebRenderer.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebRendererService.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebSnapshots.java",
+        "src/main/resources/assets/war_project/web/island.html",
+        "src/main/resources/assets/war_project/web/panel.html",
+        "src/cefApi/java/org/cef/CefApp.java",
+        "build.gradle",
+        "docs/CHROMIUM_BACKEND.md",
+        "THIRD_PARTY_LICENSES.md"
+      ],
+      "sessionIds": [
+        "55d124d3-a260-49d9-bdbd-5385a2c2ff37"
+      ],
+      "createdAt": "2026-09-19T19:28:45.332Z",
+      "updatedAt": "2026-09-19T19:28:45.332Z",
+      "lastAccessedAt": "2026-09-19T21:45:53.294Z",
+      "revision": 1,
+      "contentHash": "7d089f901261e64f3a21727a1c9414b3c63f21d1bfdcdcf80081bc45c2f75b5e",
+      "sizeBytes": 14171,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "d24b47cb-4018-45a1-bed3-e71ede24d5a8",
+      "title": "War Project recovery 模块：game start 前地图快照 / game end 后恢复",
+      "description": "recovery 模块的作用域与实现契约：快照只含 MapData（玩家数据默认为空）、落盘 <存档>/war_project_recovery/snapshot.nbt、模块必须注册在最后、GameStateService 新增 onBeforeGamePhaseChanged 前置钩子、三条 /warproject recovery 指令与边界容错。改 game 生命周期、快照或恢复行为前读本文；ENDED 的重置行为见 588ee5c2，模块骨架与 SavedData 见 3d31dded。",
+      "status": "active",
+      "filename": "war-project-recovery-game-start-game-end-d24b47cb.md",
+      "relativePath": "documents/active/war-project-recovery-game-start-game-end-d24b47cb.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/recovery/RecoveryModule.java",
+        "src/main/java/com/flowingsun/war_project/recovery/RecoveryService.java",
+        "src/main/java/com/flowingsun/war_project/recovery/RecoveryApi.java",
+        "src/main/java/com/flowingsun/war_project/recovery/RecoverySnapshot.java",
+        "src/main/java/com/flowingsun/war_project/module/GameStateService.java",
+        "src/main/java/com/flowingsun/war_project/map/MapData.java",
+        "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java",
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
+        "src/main/java/com/flowingsun/war_project/WarProject.java",
+        "docs/ARCHITECTURE.md"
+      ],
+      "sessionIds": [
+        "ee78862f-3406-422f-9fac-5a9330b793c4"
+      ],
+      "createdAt": "2026-09-19T19:34:56.459Z",
+      "updatedAt": "2026-09-19T19:34:56.459Z",
+      "lastAccessedAt": "2026-09-19T20:28:27.364Z",
+      "revision": 1,
+      "contentHash": "92392d220c1b7319ce2d32131617a50d1daafcf47f4d3712b0d41461bfdcb0ee",
+      "sizeBytes": 9649,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "b0da5a59-58c3-4222-b1f6-9a80bec175c1",
+      "title": "War Project 增量交接：Chromium 不出帧/黑块根因、进程级崩溃排查与 Chrome 后端稳定性加固",
+      "description": "接在 dfbfbd61（自建 CEF 后端架构）之后的增量：createImmediately 是浏览器真正创建的唯一步骤（漏调=不出帧+黑块）、未写内容的 GL 纹理会被驱动读回成不透明黑块、门控必须与自研内核一致、进程级崩溃的判据与排除法（无 Java 报告/无 hs_err/事件日志无 Error/日志在渲染线程硬截断）、CEF GPU 合成与 MC 光影争卡的加固（--disable-gpu 实测仍出帧）、像素缓冲锁与 GL 容量校验、用户 2026-09-20 的 UI 四条修订（紧凑/中文/1:1 不发糊/改回原版 PNG）。追 Chromium 出帧或崩溃问题前先读。",
+      "status": "active",
+      "filename": "war-project-chromium-chrome-b0da5a59.md",
+      "relativePath": "documents/active/war-project-chromium-chrome-b0da5a59.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/client/cef/CefOsrView.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefBootstrap.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefWebRenderer.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebPages.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebRendererService.java",
+        "src/main/resources/assets/war_project/web/island.html",
+        "src/main/resources/assets/war_project/web/panel.html",
+        "docs/CHROMIUM_BACKEND.md"
+      ],
+      "sessionIds": [
+        "efa146ba-b4e8-42cf-afa0-fc2150a2c6fe"
+      ],
+      "createdAt": "2026-09-19T19:59:59.191Z",
+      "updatedAt": "2026-09-19T19:59:59.191Z",
+      "lastAccessedAt": "2026-09-19T21:45:53.294Z",
+      "revision": 1,
+      "contentHash": "589da72e92a9668f185df8acbf05a6a439764f5e4e086dd26162f92c75e9b64e",
+      "sizeBytes": 9848,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "9cf19d0f-cc20-47fb-9e20-43f70d30c126",
+      "title": "War Project 指令可用性验证法 + Brigadier 参数陷阱：/warproject map set 从不可用 → 修复",
+      "description": "两条可复用知识：(1) Brigadier 的 StringArgumentType.word() 只接受 0-9 A-Z a-z _ - . +（不含逗号），所以 /warproject map set 0,0 9,9 从最初那版起永远失败（Expected whitespace to end one argument），修复为自定义 command/ChunkPosArgument；(2) 无头端到端验证流程——runServer + datapack 的 tick function 当自动敲命令器（加载期即校验语法）+ RCON 帧协议（登录帧必须读完否则读取错位）+ save-all 后 GZip 解 run/world/data/*.dat 搜 NBT 键验落盘。含真实回显证据。要改任何命令参数或需真机验证指令/落盘时读本文；边界规则本身见 21dce6fc。",
+      "status": "active",
+      "filename": "war-project-brigadier-warproject-map-set-9cf19d0f.md",
+      "relativePath": "documents/active/war-project-brigadier-warproject-map-set-9cf19d0f.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/command/ChunkPosArgument.java",
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
+        "docs/ARCHITECTURE.md"
+      ],
+      "sessionIds": [
+        "0142d792-5af5-4e1e-b9c2-b472b59deac5"
+      ],
+      "createdAt": "2026-09-19T20:19:43.162Z",
+      "updatedAt": "2026-09-19T20:19:43.162Z",
+      "lastAccessedAt": "2026-09-19T21:02:00.252Z",
+      "revision": 1,
+      "contentHash": "7808b5a45cec539c781628e173f1262da81bca9f145ac4f445bf8f8a9c3eaadb",
+      "sizeBytes": 8917,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "f4ace0dc-845d-42d6-bfff-0178f817d132",
+      "title": "War Project 命令参数红线与登录期命令树事故：勘误 9cf19d0f（map set 已改为 4 个整数）",
+      "description": "取代 9cf19d0f「必须自建 ArgumentType / 不需要注册 ArgumentTypeInfos」的结论，并更正 21dce6fc 规则 1 的逗号语法：自定义 ArgumentType 未注册进 ArgumentTypeInfos 时，登录期 ClientboundCommandsPacket 会抛 Unrecognized argument type → Couldn't place player in world，装该 jar 后任何存档都进不去（2026-09-20 真实事故）。含现行 /warproject map set <fromX> <fromZ> <toX> <toZ> 语法、无头验证的登录盲区、以及 MC 文件必须无 BOM 的坑。改命令参数或做指令验证前必读。",
+      "status": "active",
+      "filename": "war-project-9cf19d0f-map-set-4-f4ace0dc.md",
+      "relativePath": "documents/active/war-project-9cf19d0f-map-set-4-f4ace0dc.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java",
+        "docs/ARCHITECTURE.md",
+        "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java",
+        "src/main/java/com/flowingsun/war_project/map/MapData.java"
+      ],
+      "sessionIds": [
+        "ab8bbdd5-419e-4667-a96b-682352a957d2"
+      ],
+      "createdAt": "2026-09-19T20:28:51.051Z",
+      "updatedAt": "2026-09-19T20:28:51.051Z",
+      "lastAccessedAt": "2026-09-19T21:02:00.252Z",
+      "revision": 1,
+      "contentHash": "87ed830237b040d7452651ba6201bdb47681b005fde16b5f9fd81a1657a1f3b2",
+      "sizeBytes": 8501,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "0fc0657c-b1c4-4619-8491-0ca9c54dff57",
+      "title": "War Project 增量交接：Chromium 物理分辨率渲染（device_scale_factor）、显示规则与最终界面规格",
+      "description": "接在 b0da5a59（createImmediately 根因/崩溃排查/稳定性加固）之后的增量：CEF 必须按物理分辨率渲染 —— browser_rect=GUI 尺寸、覆盖 CefScreenInfo.getScreenInfo 返回 device_scale_factor=Minecraft.getGuiScale()，输出 GUI×scale 的帧再缩回 GUI 尺寸；**推翻**「1 GUI 像素=1 页面像素」（那会被 MC 放大 N 倍而糊）。含 2026-09-20 末轮三条修订（打开任意 GUI 隐藏岛且热区保留、岛取消阴影、岛 156×18/面板 208×168/图标 12px/字号 9px）、验证证据（scale 2/4 → 400×52/800×104，图标由团块变清晰）与改渲染分辨率/显示规则前必读的坑。",
+      "status": "active",
+      "filename": "war-project-chromium-device-scale-factor-0fc0657c.md",
+      "relativePath": "documents/active/war-project-chromium-device-scale-factor-0fc0657c.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/client/cef/CefOsrView.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefWebRenderer.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebPages.java",
+        "src/main/java/com/flowingsun/war_project/client/ResourceTransferController.java",
+        "src/main/resources/assets/war_project/web/island.html",
+        "src/main/resources/assets/war_project/web/panel.html",
+        "docs/CHROMIUM_BACKEND.md"
+      ],
+      "sessionIds": [
+        "7c4ba9b3-241c-4e2e-b2e6-094af8548f01"
+      ],
+      "createdAt": "2026-09-19T20:45:00.801Z",
+      "updatedAt": "2026-09-19T20:45:00.801Z",
+      "lastAccessedAt": "2026-09-19T21:19:34.542Z",
+      "revision": 1,
+      "contentHash": "07385941d628cdb444706d8a81ab379c56e8b5c15a36aa2a7997ad2e0d54eadc",
+      "sizeBytes": 7152,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "a4cb2f01-a47f-4698-8e69-5b2b4498a2fe",
+      "title": "War Project 增量交接：岛与面板合并为同一 CEF 表面（向下展开动画 / 固定位置 / 聊天栏显示规则更正）",
+      "description": "接在 0fc0657c（device_scale_factor 物理分辨率）之后，更正它的两处状态：① 显示规则改为『聊天栏照常显示岛、其它 GUI 才隐藏』；② 界面不再是 156×18 岛 + 208×168 面板两个 CEF 画布，而是单一 overlay.html 表面（206×196），折叠为 148×18 胶囊、右键向下延伸扩大（width/height/radius 220ms + 内容淡入延迟 70ms），位置固定屏幕顶部居中不随鼠标；含命中区域、收起条件与离线 Chromium 的两态验证证据。改岛/面板形态或入口前必读。",
+      "status": "active",
+      "filename": "war-project-cef-a4cb2f01.md",
+      "relativePath": "documents/active/war-project-cef-a4cb2f01.md",
+      "sourcePaths": [
+        "src/main/resources/assets/war_project/web/overlay.html",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefWebRenderer.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebPages.java",
+        "src/main/java/com/flowingsun/war_project/client/ResourceTransferController.java",
+        "docs/CHROMIUM_BACKEND.md"
+      ],
+      "sessionIds": [
+        "02631ce5-6c78-4e55-9bac-59f90a737cdc"
+      ],
+      "createdAt": "2026-09-19T21:19:59.329Z",
+      "updatedAt": "2026-09-19T21:19:59.329Z",
+      "lastAccessedAt": "2026-09-19T21:19:59.329Z",
+      "revision": 1,
+      "contentHash": "13444bfb91601e9bcb90fbcc7d98e561d1a91bc493c68cbe079b5c2fedb657ac",
+      "sizeBytes": 6131,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "7d53e3fd-9728-4a97-a49f-f1fe227a7e50",
+      "title": "War Project 增量交接：物理分辨率渲染（device_scale_factor）、岛与面板合并为单一表面、左键操作与转移冷却/单次上限",
+      "description": "接在 b0da5a59（Chromium 不出帧根因与稳定性加固）之后：放大倍率真因是缺 device_scale_factor（1 GUI 像素=1 页面像素会被 MC 放大 N 倍而糊，附对照证据与实测帧尺寸）；岛与面板合并为同一个 CEF 表面 overlay.html 206×196（折叠贴合内容、向下延伸展开动画、位置固定不随鼠标）；操作改为左键；聊天栏显示岛、其它 GUI 隐藏；字号 8.5px≈小六、左右内边距对称、body 绝对定位防撑宽；转移新增冷却 120s 与单次上限 50/25（服务端权威）。改岛/面板外观、渲染分辨率或转移规则前先读。",
+      "status": "active",
+      "filename": "war-project-device-scale-factor-7d53e3fd.md",
+      "relativePath": "documents/active/war-project-device-scale-factor-7d53e3fd.md",
+      "sourcePaths": [
+        "src/main/java/com/flowingsun/war_project/client/cef/CefWebRenderer.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefOsrView.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebPages.java",
+        "src/main/java/com/flowingsun/war_project/client/web/WebSnapshot.java",
+        "src/main/java/com/flowingsun/war_project/client/ResourceTransferController.java",
+        "src/main/java/com/flowingsun/war_project/resource/ResourceApi.java",
+        "src/main/java/com/flowingsun/war_project/Config.java",
+        "src/main/resources/assets/war_project/web/overlay.html",
+        "docs/CHROMIUM_BACKEND.md"
+      ],
+      "sessionIds": [
+        "09941909-558e-4e02-97e0-15c0ac97590a"
+      ],
+      "createdAt": "2026-09-19T21:46:37.932Z",
+      "updatedAt": "2026-09-19T21:46:37.932Z",
+      "lastAccessedAt": "2026-09-19T21:46:37.932Z",
+      "revision": 1,
+      "contentHash": "0ce0cd6a73690b6c05010a8fc3fcf8b41c20561130cae5df4412d1600730ece8",
+      "sizeBytes": 9182,
       "memoryBodyIds": []
     }
   ]

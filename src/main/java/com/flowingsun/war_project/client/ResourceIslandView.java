@@ -29,8 +29,11 @@ public final class ResourceIslandView {
             + "<span id=\"fuel-amount\" class=\"amount\">0</span>"
             + "<span id=\"fuel-rate\" class=\"rate\">+0</span>"
             + "</div></div><style>.bar{display:flex;flex-direction:row;justify-content:center;}"
-            + ".island{display:flex;flex-direction:row;align-items:center;gap:4px;background-color:#000000f0;"
-            + "border-radius:999px;padding:2px 8px;opacity:1;transition:150ms ease-out;}.island.hidden{opacity:0;}"
+            + ".island{display:flex;flex-direction:row;align-items:center;gap:4px;background-color:#05070af2;"
+            + "background-image:linear-gradient(#ffffff1f,#ffffff00);border:1px solid #ffffff26;"
+            + "border-radius:999px;padding:1px 8px;"
+            + "box-shadow:0 2px 5px #000000a6,0 8px 18px #00000059;opacity:1;transition:150ms ease-out;}"
+            + ".island.hidden{opacity:0;}"
             + ".icon{width:14px;height:14px;}.icon.fuel{margin-left:10px;}.amount{color:#ffffff;}.rate{color:#7ce38b;}</style>";
 
     private static HtmlViewHost host;

@@ -14,6 +14,8 @@ import java.util.Set;
 public final class ClientMapState {
     private static final Map<String, ClientNode> nodes = new LinkedHashMap<>();
     private static final Map<String, ClientWarzone> warzones = new LinkedHashMap<>();
+    /** The map area from the last snapshot; null while the server has none defined. */
+    private static ClientBounds bounds;
     private static int version;
 
     private ClientMapState() {
@@ -46,6 +48,7 @@ public final class ClientMapState {
                     readChunks(tag)
             ));
         }
+        bounds = snapshot.contains("bounds", Tag.TAG_COMPOUND) ? readBounds(snapshot.getCompound("bounds")) : null;
         version++;
     }
 
@@ -66,6 +69,16 @@ public final class ClientMapState {
         return version;
     }
 
+    /** The map area of the last snapshot, or null while none has been defined. */
+    public static ClientBounds bounds() {
+        return bounds;
+    }
+
+    private static ClientBounds readBounds(CompoundTag tag) {
+        return new ClientBounds(tag.getInt("min_chunk_x"), tag.getInt("min_chunk_z"),
+                tag.getInt("max_chunk_x"), tag.getInt("max_chunk_z"));
+    }
+
     private static Set<Long> readChunks(CompoundTag tag) {
         Set<Long> chunks = new LinkedHashSet<>();
         ListTag chunkTags = tag.getList("chunks", Tag.TAG_COMPOUND);
@@ -81,5 +94,31 @@ public final class ClientMapState {
     }
 
     public record ClientWarzone(String id, String nodeId, String factionId, int colorRgb, Set<Long> chunks) {
+    }
+
+    /**
+     * The playable map rectangle in chunk coordinates, inclusive on both ends; the block-space test is
+     * half-open so the far edge belongs to the outside.
+     */
+    public record ClientBounds(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ) {
+        public double minBlockX() {
+            return minChunkX * 16.0D;
+        }
+
+        public double minBlockZ() {
+            return minChunkZ * 16.0D;
+        }
+
+        public double maxBlockX() {
+            return (maxChunkX + 1) * 16.0D;
+        }
+
+        public double maxBlockZ() {
+            return (maxChunkZ + 1) * 16.0D;
+        }
+
+        public boolean containsBlock(double x, double z) {
+            return x >= minBlockX() && x < maxBlockX() && z >= minBlockZ() && z < maxBlockZ();
+        }
     }
 }

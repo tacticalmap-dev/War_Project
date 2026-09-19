@@ -4,6 +4,26 @@ title: "War Project (war_project) 架构、占点系统与可选依赖集成说�
 description: "War Project 模组的模块化结构、node/warzone 数据模型、服务端命令树、网络同步、占领逻辑、Xaero/FTB 可选集成与构建注意事项。修改本模组前先读此文档。"
 status: "active"
 created_at: "2026-09-12T07:03:48.002Z"
+updated_at: "2026-09-19T19:33:22.544Z"
+content_hash: "f2ef68585f5d83ad910289107cd7ef9a59d48da1933645e641af5381523fb3bf"
+source_paths:
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSModule.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeOccupationService.java"
+  - "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java"
+session_ids:
+  - "ad314282-4cef-4ea8-b96a-432f0104bd14"
+  - "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
+memory_body_ids:
+  []
+---
+
+---
+id: "3d31dded-b45f-4f11-a183-0d1aa78e4faa"
+title: "War Project (war_project) 架构、占点系统与可选依赖集成说明"
+description: "War Project 模组的模块化结构、node/warzone 数据模型、服务端命令树、网络同步、占领逻辑、Xaero/FTB 可选集成与构建注意事项。修改本模组前先读此文档。"
+status: "active"
+created_at: "2026-09-12T07:03:48.002Z"
 updated_at: "2026-09-12T07:03:48.002Z"
 content_hash: "a665cea8fcd98491345f0b9520449cf956d038322f70afb8e2cced563a191cc7"
 source_paths:
@@ -12,10 +32,10 @@ source_paths:
   - "src/main/java/com/flowingsun/war_project/module/ModuleRegistry.java"
   - "src/main/java/com/flowingsun/war_project/map/MapData.java"
   - "src/main/java/com/flowingsun/war_project/team/TeamData.java"
-  - "src/main/java/com/flowingsun/war_project/wargame/WargameService.java"
+  - "src/main/java/com/flowingsun/war_project/nodeLJYS/NodeLJYSService.java"
   - "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java"
   - "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
-  - "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java"
+  - "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java"
   - "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java"
   - "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java"
   - "src/optionalFtb/java/com/flowingsun/war_project/compat/ftb/FtbChunksMapDivideClient.java"
@@ -38,7 +58,7 @@ Minecraft 1.20.1 / Forge 47.x。模组 id `war_project`，显示名 War Project�
 - `WarProject.java`：唯一 `@Mod` 入口，只做四件事——注册配置（`Config.SPEC`）、注册网络（`WarProjectNetwork.register()`）、把生命周期事件转发给 `ModuleRegistry`、玩家登录时下发地图与队伍快照。
 - `module/WarProjectModule.java`：模块接口，含 `id()`、`onCommonSetup()`、`onClientSetup()`、`onServerStarting(server)`、`onServerStopping(server)`、`onRegisterCommands(dispatcher)`。
 - `module/ModuleRegistry.java`：持有模块列表并统一转发。
-- 当前模块固定为三个：`map/MapDivideModule`、`team/TeamModule`、`wargame/WargameModule`。
+- 当前模块固定为三个：`map/MapDivideModule`、`team/TeamModule`、`nodeLJYS/NodeLJYSModule`。
 - 新增功能优先做成新模块并加进主类列表，不要在 `WarProject` 里堆逻辑。
 
 ## 2. 数据模型（SavedData）
@@ -88,7 +108,7 @@ Minecraft 1.20.1 / Forge 47.x。模组 id `war_project`，显示名 War Project�
 
 客户端侧只通过 `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, ...)` 触碰客户端类，避免服务端加载客户端类。
 
-## 5. 占领逻辑（`wargame/WargameService.java` + `NodeOccupationService`）
+## 5. 占领逻辑（`nodeLJYS/NodeLJYSService.java` + `NodeOccupationService`）
 
 - 客户端：在 node 区块内、有队伍、且该 node 不属于自己/盟友时，每 20 tick 发一次占领意图。
 - 服务端：每 20 tick 结算；**只有唯一领先阵营才推进**（票数并列不推进）；无领先者或领先者与当前归属同盟时按 `nodeCaptureRecoveryPerSecond` 回退。
@@ -97,14 +117,14 @@ Minecraft 1.20.1 / Forge 47.x。模组 id `war_project`，显示名 War Project�
 
 ## 6. 占点 HUD
 
-`client/WargameCaptureHudOverlay.java` 通过 `RegisterGuiOverlaysEvent` 注册在 `VanillaGuiOverlay.HOTBAR` 之上：
+`client/NodeLJYSCaptureHudOverlay.java` 通过 `RegisterGuiOverlaysEvent` 注册在 `VanillaGuiOverlay.HOTBAR` 之上：
 
 - 进度圆环（size 22 / thickness 3 / 72 段三角带），底环 + 灰轨道 + 彩色进度；
 - 圆环中央显示 node 名称（无名字回退 id，截断 14 字符），下方显示百分比；
 - 上方兵力比条（宽 44）按 `factionsInNode` 分组为阵营侧，己方 `0xFF4FA3FF`、敌方 `0xFFFF4D4D`，多攻方时用队伍颜色；
 - 占领提示居中显示在屏幕中下方。
 
-`client/WargameCaptureHudState.java`：快照 TTL 40 tick、平滑系数 0.25；两阶段进度映射——有敌方防守且未中立化时进度的前一半映射为「削弱中」（圆环从满走向空），后一半映射为「占领中」。`WargameCaptureNoticeHudState` 同样 40 tick。
+`client/NodeLJYSCaptureHudState.java`：快照 TTL 40 tick、平滑系数 0.25；两阶段进度映射——有敌方防守且未中立化时进度的前一半映射为「削弱中」（圆环从满走向空），后一半映射为「占领中」。`NodeLJYSCaptureNoticeHudState` 同样 40 tick。
 
 HUD 只在「玩家所在 node」与快照 nodeId 一致时显示。参考模组的 wartime 门槛已被去掉，因为本模组占领始终可用。
 
@@ -143,3 +163,18 @@ HUD 只在「玩家所在 node」与快照 nodeId 一致时显示。参考模组
 - **Xaero 缓存刷新**：`regionHash` 必须把地图版本、队伍版本、本地队伍与最终关系色都算进去，否则阵营/归属变化后地图不重绘。
 - **mixin 改动需要重启客户端**才能生效，热重载不覆盖 mixin。
 - 命令与 HUD 的 node 主键一律是字符串 id，任何新的网络包/状态类都要用 `String nodeId`，不要再引入数字编号。
+
+---
+
+## 2026-09-20 模块改名：wargame → nodeLJYS
+
+用户定调：原 `wargame` 模块整体更名为 `nodeLJYS`。
+
+| 旧名 | 新名 |
+| --- | --- |
+| 包 `com.flowingsun.war_project.wargame` | `com.flowingsun.war_project.nodeLJYS` |
+| `WargameModule`（模块 id `"wargame"`） | `NodeLJYSModule`（id `"nodeLJYS"`） |
+| `WargameService` | `NodeLJYSService` |
+| `client/WargameCaptureClient`、`WargameCaptureHudOverlay`、`WargameCaptureHudState`、`WargameCaptureNoticeHudState` | 同名 `NodeLJYSCapture*` |
+
+本文正文与仓库其它历史交接文档中出现的 `wargame` / `Wargame*` 一律按上表映射为 `nodeLJYS` / `NodeLJYS*`；`client/NodeLJYSCaptureHud*.java` 注释里的 “reference mod's WargameCapture*” 指参考模组原名，保持不改。改名后已验证：`gradlew.bat build --no-daemon --offline` → BUILD SUCCESSFUL。

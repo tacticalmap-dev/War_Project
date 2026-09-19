@@ -31,6 +31,20 @@ public final class MapDivideStateApi {
         return MapData.get(server).warzoneForNode(nodeId).map(MapData.Warzone::save);
     }
 
+    /** The playable map rectangle, empty until /warproject map set has defined one. */
+    public static Optional<MapData.Bounds> getBounds(MinecraftServer server) {
+        return MapData.get(server).bounds();
+    }
+
+    /** Defines the playable map rectangle and pushes the new snapshot to every client. */
+    public static MapData.SaveResult setBounds(MinecraftServer server, int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ) {
+        MapData.SaveResult result = MapData.get(server).setBounds(minChunkX, minChunkZ, maxChunkX, maxChunkZ);
+        if (result.ok()) {
+            com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
+        }
+        return result;
+    }
+
     public static Set<String> getAllNodeIds(MinecraftServer server) {
         return MapData.get(server).nodes().stream().map(MapData.Node::id).collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
@@ -62,7 +76,7 @@ public final class MapDivideStateApi {
     public static boolean renameNode(MinecraftServer server, String oldNodeId, String newNodeId, String name) {
         boolean changed = MapData.get(server).renameNode(oldNodeId, newNodeId, name).ok();
         if (changed) {
-            com.flowingsun.war_project.wargame.NodeOccupationService.renameNode(oldNodeId, newNodeId);
+            com.flowingsun.war_project.nodeLJYS.NodeOccupationService.renameNode(oldNodeId, newNodeId);
             com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
         }
         return changed;

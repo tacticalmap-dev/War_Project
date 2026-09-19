@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Minimal HTML parser: div/span/b/strong/img/button/input/hr plus attributes id/class/style/src/value.
+ * Minimal HTML parser: div/span/b/strong/img/button/input/hr plus the SVG subset used for vector
+ * shapes (svg/path/circle/ellipse/rect/polygon/polyline), plus attributes
+ * id/class/style/src/value and any other attribute kept verbatim for the vector renderer.
  * Unknown tags and attributes are ignored, and unclosed tags are closed at the end, so a malformed
  * document degrades instead of throwing.
  *
@@ -12,7 +14,8 @@ import java.util.List;
  * {@link #refreshStyles()}.
  */
 public final class HtmlDocument {
-    private static final List<String> VOID_TAGS = List.of("img", "hr", "input", "br");
+    private static final List<String> VOID_TAGS = List.of("img", "hr", "input", "br",
+            "circle", "ellipse", "rect", "path", "polygon", "polyline", "line", "use", "stop");
 
     public final HtmlNode root;
     private final List<Rule> rules = new ArrayList<>();

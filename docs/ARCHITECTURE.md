@@ -10,7 +10,7 @@
 
 把世界按**区块**切成「节点 Node」与「战区 Warzone」，玩家所属**队伍 Team**在敌方节点区块内驻留够时间就能把节点打下来（改阵营）；地图上的归属配色由客户端渲染层叠到 Xaero / FTB Chunks 地图上。
 
-四个业务子系统：**地图划分（map）**、**队伍（team）**、**兵棋占领（wargame）**、**资源经济（resource，弹药 ammo / 燃料 fuel 两种产出）**；另有一个**全局游戏生命周期内核（module/GameStateService）**，它不属于任何模块，负责 `/warproject game start|stop|end` 的阶段状态并向订阅者广播。模块之间互不直接耦合：资源与占领各自订阅阶段变化，其余全部通过 `WarProjectNetwork` 与三个 `SavedData` 交换数据。
+四个业务子系统：**地图划分（map）**、**队伍（team）**、**兵棋占领（nodeLJYS）**、**资源经济（resource，弹药 ammo / 燃料 fuel 两种产出）**；另有一个**全局游戏生命周期内核（module/GameStateService）**，它不属于任何模块，负责 `/warproject game start|stop|end` 的阶段状态并向订阅者广播。模块之间互不直接耦合：资源与占领各自订阅阶段变化，其余全部通过 `WarProjectNetwork` 与三个 `SavedData` 交换数据。第五个模块 `recovery` 同样只订阅阶段变化：`game start` 生效前把**方块世界**（各维度的 region 文件）整份备份，`game end` 的重置跑完后只回滚这局被改动过的区块——加载中的区块逐块写回并同步客户端，未加载的区块直接把备份字节写回存档。
 
 ---
 
@@ -33,15 +33,16 @@ War_Project/
 │  │                           # + 全局游戏生命周期内核（GamePhase, GameStateService，不属于模块）
 │  ├─ map/                     # 节点 / 战区：MapData(SavedData), MapDivideModule, MapDivideStateApi
 │  ├─ team/                    # 队伍：TeamData(SavedData), TeamApi, TeamModule, TeamChatService, TeamClientState
-│  ├─ wargame/                 # 占领：WargameModule, WargameService, NodeOccupationService, CaptureProgressQueryApi
+│  ├─ nodeLJYS/                 # 占领：NodeLJYSModule, NodeLJYSService, NodeOccupationService, CaptureProgressQueryApi
 │  ├─ resource/                # 个人资源：ResourceKind, ResourceData(SavedData), ResourceService, ResourceApi, ResourceModule
-│  ├─ html/                    # 全局 HTML 渲染内核（非模块）：Css, HtmlNode, HtmlDocument, HtmlLayout, HtmlRenderer, HtmlViewHost
+│  ├─ recovery/                # 方块世界备份与回滚：RecoveryModule, RecoveryService, RecoveryApi, WorldBackup, RegionFileStore, ChunkRewriter
+│  ├─ html/                    # 全局 HTML 渲染内核（非模块）：Css, HtmlNode, HtmlDocument, HtmlLayout, HtmlRenderer, HtmlTextures, HtmlVector, HtmlViewHost
 │  ├─ client/Resource*.java    # 灵动岛 ResourceIslandView + 转移面板 ResourceTransferController + ResourceClientState + ResourceHudOverlay
 │  ├─ client/HtmlResources.java        # 从 assets/war_project/html/*.html 读模板（失败回退内置常量）
 │  ├─ client/SuperbWarfareCompat.java  # SBW 可选兼容（纯类名判定，无编译期依赖）
 │  ├─ net/                     # WarProjectNetwork：SimpleChannel + 8 个数据包
 │  ├─ command/                 # WarProjectCommands：/warproject 全局指令树（含 game / resource）
-│  ├─ client/                  # ClientMapState, WargameCaptureClient, client/xaero/XaeroWarProjectMapRenderer
+│  ├─ client/                  # ClientMapState, NodeLJYSCaptureClient, client/xaero/XaeroWarProjectMapRenderer
 │  └─ mixin/                   # WarProjectMixinPlugin：按类是否存在决定是否应用 Xaero Mixin
 ├─ src/optionalXaero/java/     # 可选兼容层（9 个文件）：Xaero 世界地图 / 小地图高亮与叠加
 ├─ src/optionalFtb/java/       # 可选兼容层（1 个文件）：FTB Chunks 大地图编辑器
@@ -62,8 +63,9 @@ flowchart TB
         REG["ModuleRegistry"]
         CMD["WarProjectCommands 全局指令树"]
         GAME["GameStateService 全局内核"]
-        WG["WargameService"]
+        WG["NodeLJYSService"]
         RES["ResourceService"]
+        REC["RecoveryService"]
         OCC["NodeOccupationService"]
         API["MapDivideStateApi"]
         CFG["Config"]
@@ -71,11 +73,12 @@ flowchart TB
         TEAM["TeamData SavedData"]
         RD["ResourceData SavedData"]
         NET["WarProjectNetwork"]
-        MOD -->|构造 4 个模块| REG
+        MOD -->|构造 5 个模块| REG
         MOD -->|commonSetup 注册 8 个包| NET
         MOD -->|起服 reset / 停服 clear| GAME
-        REG -->|WargameModule| WG
+        REG -->|NodeLJYSModule| WG
         REG -->|ResourceModule| RES
+        REG -->|RecoveryModule| REC
         REG -->|TeamModule| CMD
         CFG -.->|占领参数| WG
         CFG -.->|结算间隔| RES
@@ -85,17 +88,20 @@ flowchart TB
         CMD -->|team add / join / ally| TEAM
         GAME -->|阶段变化| WG
         GAME -->|阶段变化| RES
+        GAME -->|start 前快照 / end 后恢复| REC
         WG --> OCC
         WG -->|读队伍与盟友| TEAM
         WG -->|applyNodeCapture| API
         RES -->|读 node 产出与归属| MAP
         RES -->|读现存队伍| TEAM
         RES -->|产出入账| RD
+        REC -->|快照 / 恢复地图| MAP
+        REC -->|broadcastMap| NET
         API --> MAP
         API -->|broadcastMap| NET
     end
     subgraph CLIENT["客户端 Dist.CLIENT"]
-        WCC["WargameCaptureClient"]
+        WCC["NodeLJYSCaptureClient"]
         CS["ClientMapState / TeamClientState"]
         XR["XaeroWarProjectMapRenderer"]
         XO["Xaero 世界地图与小地图"]
@@ -114,9 +120,9 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant CC as WargameCaptureClient
+    participant CC as NodeLJYSCaptureClient
     participant NET as WarProjectNetwork
-    participant WS as WargameService
+    participant WS as NodeLJYSService
     participant API as MapDivideStateApi
     participant MAP as MapData SavedData
 
@@ -151,35 +157,51 @@ sequenceDiagram
 
 | 模块 | 文件 | 职责 |
 | --- | --- | --- |
-| 模组入口 | `WarProject.java` | `@Mod("war_project")` 入口。构造 `MapDivideModule / TeamModule / WargameModule`，交给 `ModuleRegistry`；注册 `FMLCommonSetupEvent`、`ServerStarting/Stopping`、`RegisterCommands`、`PlayerLoggedIn` 到 Forge 事件总线；注册 Common 配置。内部静态类 `ClientModEvents` 在 `Dist.CLIENT` 下注册 `WargameCaptureClient`。 |
-| 模块注册表 | `module/ModuleRegistry` + `WarProjectModule` | 定义统一生命周期接口（`onCommonSetup / onClientSetup / onServerStarting / onServerStopping / onRegisterCommands`），并把事件按顺序转发给三个模块。是「加新子系统」的唯一扩展点。 |
+| 模组入口 | `WarProject.java` | `@Mod("war_project")` 入口。构造 `MapDivideModule / TeamModule / NodeLJYSModule`，交给 `ModuleRegistry`；注册 `FMLCommonSetupEvent`、`ServerStarting/Stopping`、`RegisterCommands`、`PlayerLoggedIn` 到 Forge 事件总线；注册 Common 配置。内部静态类 `ClientModEvents` 在 `Dist.CLIENT` 下注册 `NodeLJYSCaptureClient`。 |
+| 模块注册表 | `module/ModuleRegistry` + `WarProjectModule` | 定义统一生命周期接口（`onCommonSetup / onClientSetup / onServerStarting / onServerStopping / onRegisterCommands`），并把事件按顺序转发给各模块（顺序即模块注册顺序）。是「加新子系统」的唯一扩展点。 |
 | 配置 | `Config.java` | `ForgeConfigSpec` 定义 7 项：节点占领基础秒数、停止后每秒回退、每多一名领先玩家的加速倍率与其上限、占领调试日志开关、资源结算间隔秒数（`resourceSettleIntervalSeconds`，默认 5）、资源结算调试日志开关。 |
-| 全局游戏内核 | `module/GamePhase` + `module/GameStateService` | 三态生命周期 `STOPPED / RUNNING / ENDED`。**不属于任何模块**：由入口在起服时 `reset()`（阶段不落盘，开服固定 STOPPED）、停服时 `clearActive()`；`transition(server, target)` 同步回调订阅者，单个订阅者异常只记日志。 |
+| 全局游戏内核 | `module/GamePhase` + `module/GameStateService` | 三态生命周期 `STOPPED / RUNNING / ENDED`。**不属于任何模块**：由入口在起服时 `reset()`（阶段不落盘，开服固定 STOPPED）、停服时 `clearActive()`；`transition(server, target)` 先按注册顺序回调 `onBeforeGamePhaseChanged`（此时旧阶段仍是当前阶段，recovery 在这里备份世界），再改阶段并按同一顺序回调 `onGamePhaseChanged`；单个订阅者异常只记日志、不影响其它订阅者。 |
 
 ### 三大业务子系统
 
 | 模块 | 文件 | 职责 |
 | --- | --- | --- |
-| 地图划分 | `map/MapData` | `SavedData`（`war_project_map`，挂在主世界 DataStorage）。存 `Node`（id / 名称 / 阵营 / 颜色 / 更新时间 / 区块集合）与 `Warzone`（额外绑定 `nodeId`）。负责增删改、重命名、阵营写入、NBT 读写、区块重叠校验、客户端快照。 |
-| | `map/MapDivideModule` | 服务端启动时把 `MapData` 标脏触发落盘；客户端启动时若检测到 FTB Library + FTB Chunks 就**反射**注册 `FtbChunksMapDivideClient`（用反射是为了 jar 缺失时不触发 NoClassDefFoundError）。 |
-| | `map/MapDivideStateApi` | 地图状态**门面**：区块→节点/战区查询、快照读取、创建节点+战区、改阵营、重命名；任何写操作成功后统一 `broadcastMap`。重命名还会同步改 `NodeOccupationService` 的进度键。 |
+| 地图划分 | `map/MapData` | `SavedData`（`war_project_map`，挂在主世界 DataStorage）。存 `Node`（id / 名称 / 阵营 / 颜色 / 更新时间 / 区块集合）与 `Warzone`（额外绑定 `nodeId`）。负责增删改、重命名、阵营写入、NBT 读写、区块重叠校验、客户端快照。另存**地图区域** `Bounds`（区块坐标矩形，NBT 段 `bounds`，未设置时缺段），它是「可活动区域」的唯一权威，随 `clientSnapshot` 一起下发。 |
+| | `map/MapDivideModule` | 服务端启动时把 `MapData` 标脏触发落盘，并把 `MapBoundaryService` 注册到事件总线（停服反注册）；客户端启动时若检测到 FTB Library + FTB Chunks 就**反射**注册 `FtbChunksMapDivideClient`（用反射是为了 jar 缺失时不触发 NoClassDefFoundError）。 |
+| | `map/MapDivideStateApi` | 地图状态**门面**：区块→节点/战区查询、快照读取、创建节点+战区、改阵营、重命名、读写地图区域矩形；任何写操作成功后统一 `broadcastMap`。重命名还会同步改 `NodeOccupationService` 的进度键。 |
+| | `map/MapBoundaryService` | **越界执法**（挂 Forge 总线，每 tick）。判定只针对主世界坐标（其他维度不受限）且创造/旁观豁免，用 `Bounds.containsBlock`（半开区间）。首个越界 tick 记录并下发 `OutOfMapWarningPacket(graceTicks)`；持续越界不再发包（客户端本地倒数）；超出 `Config.outOfMapReturnSeconds`（默认 30s）即 `player.kill()`（等价 `/kill`）并清状态。回到区内、切维度、豁免或区域被清空时发 `OutOfMapWarningPacket(-1)` 清除提示；玩家下线由 `retainAll(在线 UUID)` 兜底回收。**不与游戏阶段耦合**（始终生效）。 |
 | 队伍 | `team/TeamData` | `SavedData`（`war_project_teams`）。存 `Team`：显示名、颜色、友伤、名牌/死亡消息可见性、碰撞规则、前缀后缀、成员、管理员、盟友。提供加入/退出/清空/设管理员/改属性/结盟/查玩家所属队伍。 |
 | | `team/TeamApi` | 队伍门面：查玩家队伍、校验阵营 id 合法性、判断是否同盟、广播队伍快照。 |
 | | `team/TeamModule` | 服务端启动注册 `TeamChatService`；`onRegisterCommands` 调 `WarProjectCommands.register`。 |
 | | `team/TeamChatService` | `ServerChatEvent`（HIGHEST 优先级）拦截：处于队伍频道的玩家，其聊天被取消并按队伍转发；`/warproject team msg switch` 切换公共/队伍频道。装有 e33chat 且其群组引擎可用时，频道切换交给 e33chat 的群组页签，本服务不再拦截。 |
 | | `team/TeamE33ChatBridge` | 可选 e33chat 集成（纯反射，无编译期依赖）：把每个队伍与每个「同盟簇」声明成 e33chat 群组，队伍随即出现在 e33chat 的群组页签里。 |
-| 兵棋占领 | `wargame/WargameService` | 核心玩法循环。挂 Forge 事件总线，`ServerTickEvent` 每 20 tick 执行：清理过期意图（TTL 60 tick）→ 按节点统计各队伍在场人数 → `uniqueLeader`（并列则无人领先）→ 与当前阵营同盟则不进反退（`recover`）→ 否则按人数倍率推进度、广播进度、≥50% 且原属某队时先中立化、≥阈值时把节点判给攻方并清进度。 |
-| | `wargame/NodeOccupationService` | 占领进度内存表（`nodeId → Progress(attackerFactionId, progressSeconds)`），支持重命名搬迁。不落盘，重启即清空。 |
-| | `wargame/CaptureProgressQueryApi` | 只读查询门面，供 `/warproject progress node` 使用。 |
-| | `wargame/WargameModule` | 服务端启动把 `WargameService` 注册到事件总线并订阅游戏阶段，停止时反注册、移除监听并 `clearActive()`。 |
+| 兵棋占领 | `nodeLJYS/NodeLJYSService` | 核心玩法循环。挂 Forge 事件总线，`ServerTickEvent` 每 20 tick 执行：清理过期意图（TTL 60 tick）→ 按节点统计各队伍在场人数 → `uniqueLeader`（并列则无人领先）→ 与当前阵营同盟则不进反退（`recover`）→ 否则按人数倍率推进度、广播进度、≥50% 且原属某队时先中立化、≥阈值时把节点判给攻方并清进度。 |
+| | `nodeLJYS/NodeOccupationService` | 占领进度内存表（`nodeId → Progress(attackerFactionId, progressSeconds)`），支持重命名搬迁。不落盘，重启即清空。 |
+| | `nodeLJYS/CaptureProgressQueryApi` | 只读查询门面，供 `/warproject progress node` 使用。 |
+| | `nodeLJYS/NodeLJYSModule` | 服务端启动把 `NodeLJYSService` 注册到事件总线并订阅游戏阶段，停止时反注册、移除监听并 `clearActive()`。 |
 | 资源经济 | `resource/ResourceKind` | 两种资源的唯一枚举：`AMMO("ammo")` / `FUEL("fuel")`，`parse(String)` 供指令与包解析；非法值不猜测、直接失败。 |
 | | `resource/ResourceData` | `SavedData`（`war_project_resources`）。**每玩家**一对存量（`players[] = {id(scoreboardName), ammo, fuel}`；旧档 `teams[]` 段读档时忽略并记日志），提供 `stock` / `setAmount` / `addAmount` / `addStocksForPlayers` / `spend` / `clearAll` / `playerNames`。**落盘**，重启后存量保留。两种资源有**硬上限 999**（`ResourceData.MAX_AMOUNT`）：结算入账、管理员 set/add、转移、NBT 读档全部经同一个 clamp。 |
-| HTML 渲染内核 | `html/`（Css, HtmlNode, HtmlDocument, HtmlLayout, HtmlRenderer, HtmlViewHost） | 全局客户端内核，**不属于任何模块**，零依赖。支持 `div/span/b/img/button/input/hr`、内联 `style` 与 `<style>` 内的 `.class`/`#id`/元素/`:hover`/`:active` 规则、圆角（逐行 `fill` 内缩）、阴影、边框、flex(row/column)、margin/padding/gap、align-items、justify-content、opacity、transform(scale/translate)、transition 缓动；**CSS 规则不烘焙**，切换 class 后由 `HtmlDocument.refreshStyles()` 重新求值（`HtmlViewHost` 按 `classRevision` 检测），否则运行时 `setClass` 不生效；`img` 必须用 11 参数 `blit`；`<input>` 复用 vanilla `EditBox`（外层外观由内核绘制）。模板从 `assets/war_project/html/*.html` 读取，失败回退内置常量。 |
+| Chromium 渲染后端（可选，自建） | `client/cef/`（CefNatives, CefBootstrap, CefOsrView, WpCefBrowser, CefTexture, CefKeyMap, CefWebRenderer）+ `client/web/`（WebRenderer, WebRendererService, WebSnapshots, WebPages, WebJson, CefAvailability）+ `src/cefApi/java/org/cef/**` | **自建 CEF 集成，不依赖任何第三方 mod**（详见 `docs/CHROMIUM_BACKEND.md`）。`CefNatives` 按 `java-cef-builds/<commit>/windows_amd64.tar.gz` 下载（约 119 MiB，支持 `<gameDir>/war_project-cef/` 预置离线安装）→ 校验 → 自写 tar.gz 解压；`CefBootstrap` 设置 `jcef.path` 与 `windowless_rendering_enabled` 后启动 `CefApp`/`CefClient`，由每 tick 的 `N_DoMessageLoopWork()` 驱动消息泵（不用 mixin）；`CefOsrView` 继承 `CefBrowserOsr`，把**预乘 BGRA** 像素在渲染线程以 `glTexImage2D/glTexSubImage2D(GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV)` 上传，经 `CefTexture extends AbstractTexture` 包装后用 `GuiGraphics.blit`（混合 `ONE, ONE_MINUS_SRC_ALPHA` + `flush()`）绘制；页面是 `assets/war_project/web/{island,panel}.html`，以 `data:` URL 内联加载，JS↔Java 走 `CefMessageRouter` 的 `cefQuery`。**任何失败（无网/校验失败/\`UnsatisfiedLinkError\`/异常）都回退自研内核**：`WebRendererService.active()` 返回 null，而 `html/` 内核与现有页面原样保留。配置：`webRenderer`、`webRenderScale`、`cefMirror`、`webDiagnostics`。 |
+| HTML 渲染内核 | `html/`（Css, HtmlNode, HtmlDocument, HtmlLayout, HtmlRenderer, HtmlViewHost） | 全局客户端内核，**不属于任何模块**，零依赖。支持 `div/span/b/img/button/input/hr` 与 SVG 子集 `svg/path/circle/ellipse/rect/polygon/polyline`、内联 `style` 与 `<style>` 内的 `.class`/`#id`/元素/`:hover`/`:active` 规则、**抗锯齿圆角**（`HtmlTextures` 用圆角矩形解析 SDF 逐像素求覆盖率，1px AA；逐行 `fill` 仅作回退）、`box-shadow` 列表（含 `inset`，按距离场模糊成真实软阴影）、`border` 简写 + 描边高光环（顶部更亮，形成立体感）、`background-image:linear-gradient(上,下)` 光泽、flex(row/column)、margin/padding/gap、align-items、justify-content、opacity、transform(scale/translate)、transition 缓动；生成的形状以**白色 + alpha** 纹理上传（`NativeImage.setPixelRGBA` 通道序不影响结果），绘制时用 `setColor` 着色，避免自建顶点与 GUI 批次冲突；矢量图形由 `HtmlVector` 以 4×4 超采样覆盖率光栅化成纹理（非零环绕填充，支持 `d` 的 M/L/H/V/C/S/Q/T/Z 与 `fill`/`fill-opacity`），因此任意尺寸下都是真曲线、无需图片素材；**CSS 规则不烘焙**，切换 class 后由 `HtmlDocument.refreshStyles()` 重新求值（`HtmlViewHost` 按 `classRevision` 检测），否则运行时 `setClass` 不生效；`img` 必须用 11 参数 `blit`；`<input>` 复用 vanilla `EditBox`（外层外观由内核绘制）。模板从 `assets/war_project/html/*.html` 读取，失败回退内置常量。 |
 | | `resource/ResourceService` | 挂 Forge 总线，`ServerTickEvent` 累计 tick：阶段非 RUNNING 时清零待结算 tick（不补算），攒满 `intervalTicks = max(1, round(resourceSettleIntervalSeconds * 20))` 后按真实经过秒数分别结算 `ammoPerMinute * elapsedSeconds / 60` 与 `fuelPerMinute * elapsedSeconds / 60`，只发给 node 归属且在 `TeamData` 中仍存在的队伍（盟友不分成）。 |
 | | `resource/ResourceApi` | 服务端门面：`stock` / `stocks`（只列现存队伍）/ `set` / `add`（管理员，任意阶段，写入同样受 999 上限夹紧）/ `spend(kind)`（消耗，仅 RUNNING）。 |
 | | `resource/ResourceModule` | 注册服务与阶段监听；收到 `ENDED` 时清空所有队伍资源（两种一起），并在任何阶段变化后广播一次资源快照（HUD 显隐与刷新）。 |
-| 资源 HUD + 转移面板 | `client/ResourceIslandView`、`client/ResourceTransferController` | 灵动岛与转移面板均由 HTML 内核渲染。灵动岛：`running && hasTeam && 非 SBW 炮镜` 时显示（无屏幕时由 `ResourceHudOverlay` 调，聊天等 Screen 打开时由 `ScreenEvent.Render.Post` 调，保证可见可点），屏幕正上方居中，两条「图标 + 存量 + `+每60s增量`」（图标 `assets/war_project/textures/gui/ammo.png` / `fuel.png`，128×128 缩放到 16×16；速率为本人所在队伍全部归属 node 的 60s 产出之和）。转移面板：聊天栏（`ChatScreen`）打开时右键灵动岛 ammo/fuel 图标 → 面板出现在鼠标位置（越界夹回）→ 选本队成员（离线置灰、每行显示 A/F 存量）→ 输入数量（`EditBox`，上限 `min(自己余额, 999 − 对方存量)`）→ Confirm/Cancel；ESC 或点击面板外关闭；面板打开期间鼠标/滚轮/按键/字符事件在面板区域内 `setCanceled` 拦截；过渡动画 150–160ms。 |
+| 资源 HUD + 转移面板 | `client/ResourceIslandView`、`client/ResourceTransferController` | 灵动岛与转移面板均由 HTML 内核渲染。灵动岛：`running && hasTeam && 非 SBW 炮镜` 时显示（无屏幕时由 `ResourceHudOverlay` 调，聊天等 Screen 打开时由 `ScreenEvent.Render.Post` 调，保证可见可点），屏幕正上方居中，两条「图标 + 存量 + `+每60s增量`」（图标为 `resource_island.html` 内联的 **SVG 矢量图**——弹药三发弹体、燃料油桶——由 `HtmlVector` 光栅化，原始 `assets/war_project/textures/gui/ammo.png` / `fuel.png` 仍保留作栅格回退；速率为本人所在队伍全部归属 node 的 60s 产出之和）。灵动岛胶囊：`background-color:#05070af2` + 顶部白色渐变光泽 + `border:1px solid #ffffff26` 高光环 + 双层 `box-shadow` 外投影，边界由 SDF AA 渲染无锯齿。转移面板：聊天栏（`ChatScreen`）打开时右键灵动岛 ammo/fuel 图标 → 面板出现在鼠标位置（越界夹回）→ 选本队成员（离线置灰、每行显示 A/F 存量）→ 输入数量（`EditBox`，上限 `min(自己余额, 999 − 对方存量)`）→ Confirm/Cancel；ESC 或点击面板外关闭；面板打开期间鼠标/滚轮/按键/字符事件在面板区域内 `setCanceled` 拦截；过渡动画 150–160ms。 |
 | | `map/MapData#setNodeResourceOutputs` | mapdevide 侧只存「该 node 60 秒的弹药与燃料产出量」两个数值（NBT `ammo_per_minute` / `fuel_per_minute`；旧的单值键 `resource_per_minute` 迁移为 ammo），结算不在这里发生；`resetAllNodeFactions()` 供 `ENDED` 把全部 node 及其 warzone 重置为 neutral。 |
+| 地图边界 | `client/MapBoundaryRenderer` | 世界里沿地图区域画一圈竖直条纹墙：纹理 `minecraft:textures/misc/forcefield.png`、`GameRenderer.getPositionTexShader`、`QUADS/POSITION_TEX`、加法混合 `blendFuncSeparate(SRC_ALPHA, ONE, ONE, ZERO)` + `depthMask(false)` + `disableCull/enableCull`——逐条对齐 `LevelRenderer.renderWorldBorder` 的字节码，只有颜色改成黄色 `(1.0, 0.82, 0.25, 0.65)`、几何来自 `ClientMapState.bounds()`、UV 按 0.5/格铺贴并带 3s 周期滚动。顶点是**相机相对坐标**（世界坐标 − `Camera.getPosition()`），只在 `RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS` 且当前维度为主世界时绘制。**不使用原版世界边界**（它会硬阻挡玩家）。 |
+| | `client/OutOfMapClientState` / `client/OutOfMapHudOverlay` | 越界提示：客户端收到 `OutOfMapWarningPacket` 后按毫秒记下截止时间并在本地倒数（因此不需要每 tick 发包），`OutOfMapHudOverlay` 用 `registerAbove(VanillaGuiOverlay.CROSSHAIR…)` 在准星下方 12px 居中渲染红字「请在 Ns 内返回地图区域」，四向黑色描边保证在雪地/天空/熔岩上都能读。 |
+| | `optionalXaero` 界外红雾 | 世界地图 `XaeroWorldMapScreenOverlay` 在同一个 `POSITION_COLOR` 批里**最先**画 4 条界外遮罩（`0x38FF3B30`，夹到屏幕内），战区填充/边线/名称压在其上；小地图 `XaeroMinimapOverlay` 因为视图随朝向旋转，改用「4 角投影 + 逐行扫描求行内区间」（`0x44FF3B30`），视口完全看不到地图区域时退化为一次裁剪填充，且始终画在屏幕层（不受 FBO 路径影响）。 |
+
+#### 方块世界备份与回滚（recovery）
+
+| 模块 | 文件 | 职责 |
+| --- | --- | --- |
+| 世界备份与回滚 | `recovery/RecoveryModule` | 起服时把 `RecoveryService` 挂上事件总线并订阅 `GameStateService`：`onBeforeGamePhaseChanged(RUNNING)` 备份世界（此刻世界仍是 start 之前的状态），`onGamePhaseChanged(ENDED)` 发起回滚。注册在模块列表最后，保证回滚发生在资源清空与 node 重置之后。 |
+| | `recovery/RecoveryService` | 编排与进度：`capture` 先对各维度 `ServerLevel.save(null, true, false)` 刷盘，再整份复制 region 文件；`beginRestore` 再次刷盘、用「每区块时间戳」找出这局被改动过的区块并入队；`onServerTick` 每 tick 最多 8 个区块 / 8ms 地重放，结束后写日志并广播统计。备份时间、文件数、体积、上次回滚的区块/方块数、失败数都保留在服务里供指令输出。 |
+| | `recovery/RecoveryApi` | 服务端门面：`captureSnapshot` / `restoreSnapshot` / `statusLine`，返回 `Outcome(ok, message)`，异常一律转成失败回执而不抛出。 |
+| | `recovery/WorldBackup` | 文件层：扫描存档下所有 `region/` 目录（主世界、`DIM-1`、`DIM1`、`dimensions/<ns>/<path>`），复制到 `<存档>/war_project_recovery/world/<相对路径>`；用 region 头部的时间戳表比较「当前 vs 备份」，得到需要回滚的区块清单（备份里不存在的区块视为新探索区域，跳过不动）。玩家数据、`data/`（SavedData）、实体与 POI 一律不参与。 |
+| | `recovery/RegionFileStore` | `.mca` 读写：8 KiB 头（1024 个 4 字节扇区分配 + 1024 个 4 字节时间戳）与 4 KiB 扇区负载的解析与写回；区块负载按原字节搬运（含 4 字节长度、压缩方式字节与压缩数据），未加载区块无需解压即可回写，写入复用空闲扇区区间。 |
+| | `recovery/ChunkRewriter` | 已加载区块的内存回写：用 `ChunkSerializer.read(ServerLevel, PoiManager, ChunkPos, CompoundTag)` 把备份 NBT 还原成方块数据，逐 section 逐方块与当前区块比对，只对不一致的位置执行 `Level.setBlock(..., UPDATE_CLIENTS \| UPDATE_KNOWN_SHAPE \| UPDATE_SUPPRESS_DROPS)`——客户端即时刷新，且不触发连锁更新与掉落。 |
 
 #### e33chat 可选集成（队伍 / 同盟 → 群组）
 
@@ -191,15 +213,16 @@ sequenceDiagram
 
 | 模块 | 职责 |
 | --- | --- |
-| `net/WarProjectNetwork` | 单例 `SimpleChannel`（`war_project:main`，协议号 `6`）。注册 11 类包：**S→C** `MapSyncPacket`、`TeamSyncPacket`、`CaptureProgressPacket`、`CaptureNoticePacket`、`ResourceSyncPacket`、`TransferResultPacket`；**C→S** `CaptureIntentPacket`、`CreateNodeWarzonePacket`、`EditMapObjectPacket`、`SetNodeResourcePacket`、`TransferResourcePacket`。`ResourceSyncPacket` 是**个性化**包（`running, hasTeam, ammo, fuel, ammoPerMinute, fuelPerMinute, teammates[]`）。写地图的 C→S 包（含 `SetNodeResourcePacket`）都在服务端做 **OP 2 级权限校验**。所有 payload 都是 NBT `CompoundTag` 或长整型集合，客户端侧用 `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, ...)` 隔离。资源通过 `ResourceSyncPacket` 广播：每队存量 + 该队每 60s 速率（每 5s 结算后、阶段变化后、玩家登录时各推一次）。 |
+| `net/WarProjectNetwork` | 单例 `SimpleChannel`（`war_project:main`，协议号 `7`）。注册 12 类包：**S→C** `MapSyncPacket`、`TeamSyncPacket`、`CaptureProgressPacket`、`CaptureNoticePacket`、`ResourceSyncPacket`、`TransferResultPacket`、`OutOfMapWarningPacket`（`remainingTicks > 0` 表示开始/刷新越界倒计时，`-1` 表示清除）；**C→S** `CaptureIntentPacket`、`CreateNodeWarzonePacket`、`EditMapObjectPacket`、`SetNodeResourcePacket`、`TransferResourcePacket`。`ResourceSyncPacket` 是**个性化**包（`running, hasTeam, ammo, fuel, ammoPerMinute, fuelPerMinute, teammates[]`）。写地图的 C→S 包（含 `SetNodeResourcePacket`）都在服务端做 **OP 2 级权限校验**。所有 payload 都是 NBT `CompoundTag` 或长整型集合，客户端侧用 `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, ...)` 隔离。资源通过 `ResourceSyncPacket` 广播：每队存量 + 该队每 60s 速率（每 5s 结算后、阶段变化后、玩家登录时各推一次）。 |
 
 ### 指令与客户端
 
 | 模块 | 文件 | 职责 |
 | --- | --- | --- |
-| 指令树 | `command/WarProjectCommands` | `/warproject`（需 OP 2 级），**全局命令树，唯一注册点**（`TeamModule.onRegisterCommands` 调 `WarProjectCommands.register`）。子命令：`chunk info`、`map set`、`node list/info/setfaction/rename/delete`、`node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>`、`warzone list/info/node`、`progress node`、`game start|stop|end|status`、`resource list`、`resource player <player>`、`resource set|add|take|transfer <player> <ammo|fuel> <amount>`（写入受 999 上限夹紧并回显实际存量；`transfer` 需玩家执行且仅 RUNNING，服务端校验同队/在线/余额/对方容量）、`team add/remove/empty/join/leave/list/msg switch/admin set|remove/modify/ally`。补全来自 `MapDivideStateApi` 与 `TeamData`。node 与战区只能成对存在，因此删除入口只有 `node delete`，它连带删掉该 node 绑定的战区；没有独立的战区删除指令；战区阵营也一律由 `node setfaction` 下发（`warzone setfaction` 已取消），两者立场不会互相矛盾。 |
-| 指令归属 | `/warproject game ...` | **全局指令，不属于任何模块**：它只调用 `module/GameStateService`；`resource` 与 `wargame` 各自订阅阶段变化并在自己的包里反应（资源清空、node 重置）。 |
-| 客户端占领探测 | `client/WargameCaptureClient` | 每 20 tick 检查本地玩家所在区块是否属于「非本方且非同盟」的节点；是则发 `CaptureIntentPacket`。同时接收进度回包存到 `lastNodeId/lastProgress`（预留 HUD 接口，目前无消费方）。 |
+| 指令树 | `command/WarProjectCommands` | `/warproject`（需 OP 2 级），**全局命令树，唯一注册点**（`TeamModule.onRegisterCommands` 调 `WarProjectCommands.register`）。子命令：`chunk info`、`map set <fromX> <fromZ> <toX> <toZ>`（四个整数区块坐标，定义地图区域矩形；**只能用 Brigadier 自带参数类型**——自定义 `ArgumentType` 若未注册进 `ArgumentTypeInfos`，登录时的命令树包会抛 `Unrecognized argument type` 并导致 `Couldn't place player in world`，玩家彻底进不去存档（2026-09-20 真实事故）；而 `StringArgumentType.word()` 只接受 `0-9 A-Z a-z _ - . +`、不含逗号，所以早期的 `0,0` 形式必然报 `Expected whitespace to end one argument`。顺带把主世界残留的原版世界边界复位到 `WorldBorder.MAX_SIZE`，因为边界不再硬阻挡）、`map info`（只读回显当前地图区域）、`node list/info/setfaction/rename/delete`、`node setresource <nodeId> <ammoPerMinute> <fuelPerMinute>`、`warzone list/info/node`、`progress node`、`game start|stop|end|status`、`resource list`、`resource player <player>`、`resource set|add|take|transfer <player> <ammo|fuel> <amount>`（写入受 999 上限夹紧并回显实际存量；`transfer` 需玩家执行且仅 RUNNING，服务端校验同队/在线/余额/对方容量）、`team add/remove/empty/join/leave/list/msg switch/admin set|remove/modify/ally`。补全来自 `MapDivideStateApi` 与 `TeamData`。node 与战区只能成对存在，因此删除入口只有 `node delete`，它连带删掉该 node 绑定的战区；没有独立的战区删除指令；战区阵营也一律由 `node setfaction` 下发（`warzone setfaction` 已取消），两者立场不会互相矛盾。 |
+| 指令归属 | `/warproject game ...` | **全局指令，不属于任何模块**：它只调用 `module/GameStateService`；`resource`、`nodeLJYS` 与 `recovery` 各自订阅阶段变化并在自己的包里反应（资源清空、node 重置、世界备份与回滚）。 |
+| | `/warproject recovery status\|snapshot\|restore` | **recovery 模块的运维指令**（同一指令树下，经 `recovery/RecoveryApi` 调用）：`status` 打印备份时间、region 文件数与体积、备份目录、是否正在回滚、上次回滚的区块/方块/失败数；`snapshot` 手动重拍备份；`restore` 手动发起回滚。自动流程（start 前备份、end 后回滚）与它们共用同一份备份。 |
+| 客户端占领探测 | `client/NodeLJYSCaptureClient` | 每 20 tick 检查本地玩家所在区块是否属于「非本方且非同盟」的节点；是则发 `CaptureIntentPacket`。同时接收进度回包存到 `lastNodeId/lastProgress`（预留 HUD 接口，目前无消费方）。 |
 | 客户端状态镜像 | `client/ClientMapState`、`client/ResourceClientState`、`team/TeamClientState` | 保存服务端下发的 NBT / 资源快照并提供 `version` 版本号，作为渲染层的失效判据与查询源。 |
 | 渲染计算 | `client/xaero/XaeroWarProjectMapRenderer` | 与具体地图模组无关的纯计算层：按「本方/同盟=蓝、敌对=红、中立=白」解析阵营配色；战区做半透明填充 + 虚线边、节点做实线边，只在区域外边界描边；`regionHash` 把地图版本、队伍版本、区块归属、阵营关系混合成一个哈希，供地图模组做重绘缓存键。 |
 | 可选兼容 | `src/optionalXaero`（9 文件） | `XaeroWorldMapSessionMixin` / `XaeroMinimapSessionMixin` 用 `@Redirect` 挂进 Xaero 的 `HighlighterRegistry.end()` 完成注册；`XaeroCommonMinimapRendererMixin` 在小地图渲染前绘制叠加层；`XaeroWorldMapScreenOverlay` 通过 `ScreenEvent.Render.Post` 反射读相机/缩放字段直接绘制战区与节点边框。 |
@@ -210,12 +233,12 @@ sequenceDiagram
 
 ## 5. 主运行流程（文字版）
 
-1. **加载**：Forge 构造 `WarProject` → 四个模块（mapdivide / team / resource / wargame）入 `ModuleRegistry` → `FMLCommonSetupEvent` 里 `WarProjectNetwork.register()`（注册 8 个包）并广播 `onCommonSetup`。
-2. **起服**：`ServerStartingEvent` → 各模块把 `SavedData` 标脏（触发读取/落盘）并挂接服务与聊天监听（`resource` / `wargame` 同时订阅 `GameStateService`），入口随后把全局阶段重置为 STOPPED；`RegisterCommandsEvent` → 注册 `/warproject`。
+1. **加载**：Forge 构造 `WarProject` → 五个模块（mapdivide / team / resource / nodeLJYS / recovery）入 `ModuleRegistry` → `FMLCommonSetupEvent` 里 `WarProjectNetwork.register()`（注册 8 个包）并广播 `onCommonSetup`。
+2. **起服**：`ServerStartingEvent` → 各模块把 `SavedData` 标脏（触发读取/落盘）并挂接服务与聊天监听（`resource` / `nodeLJYS` 同时订阅 `GameStateService`），入口随后把全局阶段重置为 STOPPED；`RegisterCommandsEvent` → 注册 `/warproject`。
 3. **进服**：`PlayerLoggedInEvent` → 给该玩家单独推送 `MapSyncPacket` 与 `TeamSyncPacket`。
 4. **占领闭环**（客户端每 20 tick 探测 + 服务端每 20 tick 结算）：意图包 → 服务端复核 → 人数领先方推进度 → 进度回包驱动客户端显示 → 50% 中立化 → 满值改阵营 → `broadcastMap` → 所有客户端 `ClientMapState.replace` → 渲染层按帧重绘叠加。
 5. **建设闭环**（OP）：FTB 大地图拖拽选区 → 提交 → 服务端权限与重叠校验 → `MapData.saveNodeWithWarzone` → 广播。
-6. **游戏生命周期**（OP，全局）：`/warproject game start|stop|end` → `GameStateService.transition` 改阶段并同步通知订阅者：`resource` 在 ENDED 清空全部队伍资源，`wargame` 在 ENDED 把全部 node 重置为 neutral 并清空占领进度与意图；STOPPED 只冻结（占领进度、资源存量、node 归属都保留）。阶段不落盘，开服一律 STOPPED。
+6. **游戏生命周期**（OP，全局）：`/warproject game start|stop|end` → `GameStateService.transition` 改阶段并同步通知订阅者：进入 RUNNING 之前 `recovery` 把各维度 region 文件整份备份到 `<存档>/war_project_recovery/world`，`resource` 在 ENDED 清空全部玩家资源，`nodeLJYS` 在 ENDED 把全部 node 重置为 neutral 并清空占领进度与意图，`recovery`（注册在最后）紧接着按时间戳差异回滚这局改动过的区块（加载中的逐块写回并同步客户端，未加载的直接回写存档字节）并广播统计；STOPPED 只冻结（占领进度、资源存量、node 归属都保留）。阶段不落盘，开服一律 STOPPED。
 7. **个人资源与结算闭环**：`resource` 每 `resourceSettleIntervalSeconds`（默认 5s）结算一次，遍历 node：归属为真实队伍且弹药/燃料产出有值时，按「产出 × 经过秒数 ÷ 60」算出**队伍产出**，再**全额发给该队每个在线成员**（离线期间不累积），每项夹在上限 999 内。`/warproject resource ...` 与 FTB 右键菜单可查看与调整；玩家之间可用 UI（聊天栏右键灵动岛图标）或 `resource transfer` 互相转移，服务端校验「仅 RUNNING、同队、对方在线、余额足额、对方未满 999（满则整笔拒绝）」并给双方回执。每次结算后逐玩家推送 `ResourceSyncPacket`，灵动岛据此刷新自己的存量与 `+每60s速率`。
 8. **管理闭环**（OP）：`/warproject` 读写 `MapData` / `TeamData` / `ResourceData`，写成功即广播对应快照。
 
@@ -262,5 +285,5 @@ sequenceDiagram
 交叉 grep 的结果，以下几处是预留但尚无调用方，阅读代码时可先跳过：
 
 - `WarProjectModule.id()`：仅定义，`ModuleRegistry` 未使用（可用于日志/诊断）。
-- `WargameCaptureClient.lastNodeId() / lastProgress()`：进度回包已写入，但没有任何 HUD 读取。
+- `NodeLJYSCaptureClient.lastNodeId() / lastProgress()`：进度回包已写入，但没有任何 HUD 读取。
 - `XaeroWarProjectMapRenderer.renderChunk()`：`WarProjectWorldMapHighlighter.getChunkHighlitColor()` 返回 `null`，实际绘制走 `XaeroWorldMapScreenOverlay` / `XaeroMinimapScreenOverlay`，`renderChunk` 暂为遗留路径。

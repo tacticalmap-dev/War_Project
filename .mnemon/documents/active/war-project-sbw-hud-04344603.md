@@ -4,6 +4,29 @@ title: "War Project 增量交接：SBW 载具炮镜隐藏资源 HUD，与「资�
 description: "接在 b75b521b（HUD 修复/灵动岛/999）之后的增量：SBW（Superb Warfare）可选兼容——载具第一视角隐藏资源灵动岛，判定为零依赖的类名+第一人称检查（含 javap 证据与中文路径 javap 陷阱）；以及用户已定调但尚未实现的「资源个人化」改造口径（每人全额、仅在线、支出归个人、旧档丢弃、命令按玩家、HUD 改个性化推送协议 5）与影响面清单。改资源/HUD/SBW 兼容前先读。"
 status: "active"
 created_at: "2026-09-19T16:59:31.930Z"
+updated_at: "2026-09-19T19:33:38.678Z"
+content_hash: "eabca35c46876eb78658f3b397ce85d42ee2a204ab2fddddd4d18aec46672a48"
+source_paths:
+  - "src/main/java/com/flowingsun/war_project/client/SuperbWarfareCompat.java"
+  - "src/main/java/com/flowingsun/war_project/client/ResourceHudOverlay.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceData.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceService.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceApi.java"
+  - "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java"
+  - "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
+session_ids:
+  - "28d5a581-57b2-4315-827f-b581752b73bd"
+  - "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
+memory_body_ids:
+  []
+---
+
+---
+id: "04344603-850c-48cf-8f57-e7313ea8c5ad"
+title: "War Project 增量交接：SBW 载具炮镜隐藏资源 HUD，与「资源个人化」改造定调"
+description: "接在 b75b521b（HUD 修复/灵动岛/999）之后的增量：SBW（Superb Warfare）可选兼容——载具第一视角隐藏资源灵动岛，判定为零依赖的类名+第一人称检查（含 javap 证据与中文路径 javap 陷阱）；以及用户已定调但尚未实现的「资源个人化」改造口径（每人全额、仅在线、支出归个人、旧档丢弃、命令按玩家、HUD 改个性化推送协议 5）与影响面清单。改资源/HUD/SBW 兼容前先读。"
+status: "active"
+created_at: "2026-09-19T16:59:31.930Z"
 updated_at: "2026-09-19T16:59:31.930Z"
 content_hash: "8fc6aa999359d3d61ed681129077c8a6a3eff2422b6c71cb7b2482cb071ab015"
 source_paths:
@@ -38,7 +61,7 @@ memory_body_ids:
   1. `Minecraft.player.getVehicle()` 的类名**沿父类链**以 `com.atsuishio.superbwarfare.entity.vehicle` 开头；
   2. `Minecraft.options.getCameraType().isFirstPerson()` 为真。
 - 判定依据（javap 证据，非猜测）：SBW 0.8.9.1 自身的 `com.atsuishio.superbwarfare.client.overlay.RenderContext#isFirstPerson()` 反编译结果就是 `Options.m_92176_().m_90612_()Z`，即 vanilla `getCameraType().isFirstPerson()`；因此这里不反射调用对方 API 也完全等价。载具身份用类名前缀判断，避免对 SBW 产生编译期依赖。
-- 覆盖范围：**只**隐藏资源 HUD；占领圆环 HUD（`WargameCaptureHudOverlay`）等其他 HUD 未动。
+- 覆盖范围：**只**隐藏资源 HUD；占领圆环 HUD（`NodeLJYSCaptureHudOverlay`）等其他 HUD 未动。
 - 若要收紧“炮镜”口径（仅炮塔座位 / 真正开镜缩放时隐藏），SBW 侧可用入口：`VehicleEntity#getSeatIndex(Entity)`、`getZoomPos(Entity,float)` / `getZoomDirection(Entity,float)`、`getDefaultZoom(Entity)`、`useAircraftCamera(int)`、`getThirdPersonCameraPosition()`。
 - 工具陷阱：SBW jar 在 `D:\mc\.minecraft\versions\totalwar\mods\[卓越前线] superbwarfare-0.8.9.1-hotfix-mc1.20.1-…-all.jar`，路径含中文与方括号，`javap` 直接指向它会报「找不到类」；先把 jar 复制到 ASCII 路径（如 `build/tmp/…/sbw.jar`）再 `javap -p -classpath`，并用 `unzip -l | grep` 定位类名。
 
@@ -77,3 +100,5 @@ memory_body_ids:
 - 未实施「资源个人化」，仅记录口径与影响面。
 - 未把 SBW 判定扩展到占领圆环 HUD 或其他 HUD。
 - 未触碰 `docs/architecture.html` / `docs/architecture.json` 等生成物。
+
+> 模块改名注记（2026-09-20）：文中 `wargame` / `Wargame*` 已于该日更名为 `nodeLJYS` / `NodeLJYS*`（`NodeLJYSModule` 的 id 为 `"nodeLJYS"`），本文引用名已同步更新；本文其余内容为改名前的交接记录。

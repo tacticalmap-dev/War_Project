@@ -1,17 +1,38 @@
 package com.flowingsun.war_project.html;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
  * The CSS subset understood by the HTML kernel. Only the properties listed here are supported;
  * anything else is ignored so a typo can never break the whole document.
  *
- * <p>Supported: background-color/background, color, font-size, padding(-top/right/bottom/left),
- * margin(-top/right/bottom/left), border(-width/-color/-radius), box-shadow, width/height,
+ * <p>Supported: background-color/background, background-image(linear-gradient), color, font-size,
+ * padding(-top/right/bottom/left), margin(-top/right/bottom/left), border shorthand plus
+ * border-width/-color/-radius, box-shadow (a list, including {@code inset}), width/height,
  * min-width/max-width, left/top/right/bottom, position, display, flex-direction, gap, align-items,
  * justify-content, opacity, overflow, transition, transform(scale/translate), pointer-events.
  */
 public final class Css {
+
+    /** One parsed {@code box-shadow} entry. */
+    public static final class Shadow {
+        public final int offsetX;
+        public final int offsetY;
+        public final int blur;
+        public final int color;
+        public final boolean inset;
+
+        public Shadow(int offsetX, int offsetY, int blur, int color, boolean inset) {
+            this.offsetX = offsetX;
+            this.offsetY = offsetY;
+            this.blur = Math.max(0, blur);
+            this.color = color;
+            this.inset = inset;
+        }
+    }
+
     public int color = 0xFFFFFFFF;
     public boolean hasColor;
     public int background;
@@ -29,8 +50,10 @@ public final class Css {
     public int borderColor = 0xFF000000;
     public int borderRadius;
     public boolean pillRadius;
-    public int shadowSize = -1;
-    public int shadowColor = 0x60000000;
+    public final List<Shadow> shadows = new ArrayList<>();
+    public int gradientTop = 0x00000000;
+    public int gradientBottom = 0x00000000;
+    public boolean hasGradient;
     public int width = -1;
     public int height = -1;
     public int minWidth = -1;
@@ -77,8 +100,10 @@ public final class Css {
         copy.borderColor = borderColor;
         copy.borderRadius = borderRadius;
         copy.pillRadius = pillRadius;
-        copy.shadowSize = shadowSize;
-        copy.shadowColor = shadowColor;
+        copy.shadows.addAll(shadows);
+        copy.gradientTop = gradientTop;
+        copy.gradientBottom = gradientBottom;
+        copy.hasGradient = hasGradient;
         copy.width = width;
         copy.height = height;
         copy.minWidth = minWidth;
@@ -118,6 +143,21 @@ public final class Css {
                 if (parsed != null) {
                     background = parsed;
                     hasBackground = true;
+                }
+            }
+            case "background-image" -> parseBackgroundImage(value);
+            case "border" -> {
+                if (value.startsWith("none") || value.startsWith("0")) {
+                    borderWidth = 0;
+                } else {
+                    for (String part : value.split("\\s+")) {
+                        Integer parsed = parseColor(part);
+                        if (parsed != null) {
+                            borderColor = parsed;
+                        } else if (part.endsWith("px")) {
+                            borderWidth = parsePx(part, borderWidth);
+                        }
+                    }
                 }
             }
             case "color" -> {
@@ -170,10 +210,10 @@ public final class Css {
                 }
             }
             case "box-shadow" -> {
-                int[] box = parseShadow(value);
-                if (box != null) {
-                    shadowSize = box[0];
-                    shadowColor = box[1];
+                List<Shadow> parsed = parseShadows(value);
+                if (!parsed.isEmpty()) {
+                    shadows.clear();
+                    shadows.addAll(parsed);
                 }
             }
             case "width" -> width = parsePx(value, width);
@@ -279,26 +319,86 @@ public final class Css {
         };
     }
 
-    private static int[] parseShadow(String value) {
-        String[] parts = value.trim().split("\\s+");
-        if (parts.length < 2) {
-            return null;
-        }
-        int spread = 0;
-        for (String part : parts) {
-            if (part.contains("px")) {
-                spread = Math.max(spread, parsePx(part, 0));
+    /**
+     * Parses a comma separated {@code box-shadow} list. Each entry is
+     * {@code [inset] <offset-x> <offset-y> [blur] [spread] <color>}; the spread is folded into the
+     * blur so a spread-only shadow still softens instead of turning into a hard copy.
+     */
+    private static List<Shadow> parseShadows(String value) {
+        List<Shadow> result = new ArrayList<>();
+        for (String piece : splitTopLevel(value)) {
+            String[] parts = piece.trim().split("\\s+");
+            boolean inset = false;
+            List<Integer> lengths = new ArrayList<>();
+            int color = 0x60000000;
+            for (String part : parts) {
+                if (part.equalsIgnoreCase("inset")) {
+                    inset = true;
+                    continue;
+                }
+                if (part.endsWith("px")) {
+                    lengths.add(parsePx(part, 0));
+                } else {
+                    Integer parsed = parseColor(part);
+                    if (parsed != null) {
+                        color = parsed;
+                    }
+                }
             }
+            if (lengths.isEmpty()) {
+                continue;
+            }
+            int offsetX = lengths.get(0);
+            int offsetY = lengths.size() > 1 ? lengths.get(1) : 0;
+            int blur = 0;
+            if (lengths.size() > 2) {
+                blur = Math.max(0, lengths.get(2));
+            }
+            if (lengths.size() > 3) {
+                blur = Math.max(blur, Math.abs(lengths.get(3)));
+            }
+            result.add(new Shadow(offsetX, offsetY, blur, color, inset));
         }
-        int color = 0x60000000;
-        for (String part : parts) {
-            Integer parsed = parseColor(part);
+        return result;
+    }
+
+    /** {@code linear-gradient(<color>, <color>)} is kept as a vertical two stop ramp. */
+    private void parseBackgroundImage(String value) {
+        if (!value.startsWith("linear-gradient")) {
+            return;
+        }
+        List<Integer> colors = new ArrayList<>();
+        for (String piece : splitTopLevel(value.substring(value.indexOf('(') + 1, Math.max(value.indexOf('(') + 1, value.lastIndexOf(')'))))) {
+            Integer parsed = parseColor(piece.trim());
             if (parsed != null) {
-                color = parsed;
-                break;
+                colors.add(parsed);
             }
         }
-        return new int[]{spread, color};
+        if (colors.size() >= 2) {
+            gradientTop = colors.get(0);
+            gradientBottom = colors.get(colors.size() - 1);
+            hasGradient = true;
+        }
+    }
+
+    /** Splits on commas that are not inside parentheses. */
+    private static List<String> splitTopLevel(String value) {
+        List<String> result = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth = Math.max(0, depth - 1);
+            } else if (character == ',' && depth == 0) {
+                result.add(value.substring(start, i));
+                start = i + 1;
+            }
+        }
+        result.add(value.substring(start));
+        return result;
     }
 
     /** Parses #rgb / #rrggbb / #rrggbbaa / rgba(...) / a few names; null when unrecognised. */

@@ -1,6 +1,8 @@
 package com.flowingsun.war_project.client;
 
 import com.flowingsun.war_project.WarProject;
+import com.flowingsun.war_project.client.web.WebRenderer;
+import com.flowingsun.war_project.client.web.WebRendererService;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraftforge.api.distmarker.Dist;
@@ -34,6 +36,18 @@ public final class ResourceHudOverlay {
             // A screen is open: ResourceTransferController draws the island on top of it.
             return;
         }
+        WebRenderer backend = WebRendererService.active();
+        if (backend != null) {
+            backend.renderIsland(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight());
+            return;
+        }
         ResourceIslandView.render(graphics, screenWidth);
+        // While Chromium is being prepared the built in island keeps drawing and this line explains
+        // why nothing has changed yet.
+        String status = WebRendererService.statusText();
+        if (!status.isEmpty()) {
+            graphics.drawString(minecraft.font, status,
+                    (screenWidth - minecraft.font.width(status)) / 2, 26, 0xFF9AA4AF, true);
+        }
     }
 }

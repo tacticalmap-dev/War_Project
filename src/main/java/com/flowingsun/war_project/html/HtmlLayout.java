@@ -39,6 +39,10 @@ public final class HtmlLayout {
         node.contentWidth = Math.max(0, node.width - css.paddingLeft - css.paddingRight - css.borderWidth * 2);
         node.contentHeight = Math.max(0, node.height - css.paddingTop - css.paddingBottom - css.borderWidth * 2);
 
+        if (node.tag.equals("svg")) {
+            // Vector children are drawn inside the svg box, they are not laid out as boxes.
+            return;
+        }
         boolean row = css.display.equals("flex") && css.flexDirection.equals("row");
         int cursor = node.contentY;
         int rowCursor = node.contentX;
@@ -124,7 +128,7 @@ public final class HtmlLayout {
         }
         boolean row = css.display.equals("flex") && css.flexDirection.equals("row");
         int inner;
-        if (node.tag.equals("img")) {
+        if (node.tag.equals("img") || node.tag.equals("svg")) {
             inner = css.width >= 0 ? css.width : 16;
         } else if (!node.text.isEmpty()) {
             inner = font.width(node.text);
@@ -168,7 +172,7 @@ public final class HtmlLayout {
         }
         boolean row = css.display.equals("flex") && css.flexDirection.equals("row");
         int inner;
-        if (node.tag.equals("img")) {
+        if (node.tag.equals("img") || node.tag.equals("svg")) {
             inner = 16;
         } else if (!node.text.isEmpty() && node.children.isEmpty()) {
             inner = font.lineHeight;

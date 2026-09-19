@@ -4,6 +4,33 @@ title: "War Project 增量交接：双资源（ammo/fuel）与资源 HUD"
 description: "取代 588ee5c2 中「单资源标量」表述的增量：node 双产出（ammo/fuel）、ResourceKind/ResourceData 结构、命令与 FTB 菜单、ResourceSyncPacket 与顶部资源 HUD（图标+存量+每60s速率）、协议号升至 4、以及本轮未 build/未同步 jar 的状态。改动资源、HUD、网络包前先读。"
 status: "active"
 created_at: "2026-09-19T06:54:30.055Z"
+updated_at: "2026-09-19T19:33:38.622Z"
+content_hash: "895945a3891dee4f3927ea518a0bc8f7e4746619821de03979f9f327200fe206"
+source_paths:
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceKind.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceData.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceService.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceApi.java"
+  - "src/main/java/com/flowingsun/war_project/resource/ResourceModule.java"
+  - "src/main/java/com/flowingsun/war_project/map/MapData.java"
+  - "src/main/java/com/flowingsun/war_project/map/MapDivideStateApi.java"
+  - "src/main/java/com/flowingsun/war_project/net/WarProjectNetwork.java"
+  - "src/main/java/com/flowingsun/war_project/client/ResourceClientState.java"
+  - "src/main/java/com/flowingsun/war_project/client/ResourceHudOverlay.java"
+  - "src/main/java/com/flowingsun/war_project/command/WarProjectCommands.java"
+session_ids:
+  - "f2dbaa3b-c4bf-4366-9fe0-f08d000253a7"
+  - "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
+memory_body_ids:
+  []
+---
+
+---
+id: "3ea0c3c0-6079-4bcf-8580-c21edf9967b5"
+title: "War Project 增量交接：双资源（ammo/fuel）与资源 HUD"
+description: "取代 588ee5c2 中「单资源标量」表述的增量：node 双产出（ammo/fuel）、ResourceKind/ResourceData 结构、命令与 FTB 菜单、ResourceSyncPacket 与顶部资源 HUD（图标+存量+每60s速率）、协议号升至 4、以及本轮未 build/未同步 jar 的状态。改动资源、HUD、网络包前先读。"
+status: "active"
+created_at: "2026-09-19T06:54:30.055Z"
 updated_at: "2026-09-19T06:54:30.055Z"
 content_hash: "19de02f916e36a9bbfde0d111db577550fd572e0c3da0a5aab2f232fc1105b17"
 source_paths:
@@ -41,7 +68,7 @@ memory_body_ids:
 | 规格 | 取值 |
 | --- | --- |
 | node 产出种类 | **两种**：弹药 ammo 与燃料 fuel；每个 node 可同时拥有**不同**的两项 60s 产出量 |
-| `/warproject game ...` 归属 | **全局**：全局命令树（`command/WarProjectCommands` 单一注册点）+ 全局内核 `module/GamePhase` / `module/GameStateService`，不得归属任何业务模块；resource / wargame 只订阅阶段变化 |
+| `/warproject game ...` 归属 | **全局**：全局命令树（`command/WarProjectCommands` 单一注册点）+ 全局内核 `module/GamePhase` / `module/GameStateService`，不得归属任何业务模块；resource / nodeLJYS 只订阅阶段变化 |
 | 资源 HUD | 执行 `game start` 后，在**屏幕正上方中央**渲染 ammo / fuel 图标，并在图标后标出当前资源量与增加速率；速率**只显示 `+xx`**，默认语义为**每 60s 增加量** |
 
 ## 2. 双资源数据与结算
@@ -64,7 +91,7 @@ memory_body_ids:
 
 - 包 `ResourceSyncPacket(boolean running, List<ResourceTeamEntry> teams)`（S→C），条目 `ResourceTeamEntry(teamId, ammo, fuel, ammoPerMinute, fuelPerMinute)`；`ammoPerMinute` / `fuelPerMinute` 是该队**全部归属 node 的 60s 产出之和**（即 HUD 的 `+xx`）。
 - 推送时机：每 5s 结算后（`ResourceService.onServerTick`）、game 阶段变化后（`ResourceModule` 的监听器）、玩家登录时（`WarProject.onPlayerLoggedIn` → `ResourceApi.sendSync`）。
-- 客户端：`client/ResourceClientState` 镜像（`replace` / `entry(teamId)` / `isRunning()` / `reset()`，登出时由 `client/WargameCaptureClient.onLogout` 清理）；`client/ResourceHudOverlay` 注册在 `VanillaGuiOverlay.HOTBAR` 之上，**仅 `running=true` 且本地玩家属于某队**时绘制，屏幕顶部居中，每条 = 图标 + 当前存量 + `+每60s速率`（速率为 0 时用灰色）。
+- 客户端：`client/ResourceClientState` 镜像（`replace` / `entry(teamId)` / `isRunning()` / `reset()`，登出时由 `client/NodeLJYSCaptureClient.onLogout` 清理）；`client/ResourceHudOverlay` 注册在 `VanillaGuiOverlay.HOTBAR` 之上，**仅 `running=true` 且本地玩家属于某队**时绘制，屏幕顶部居中，每条 = 图标 + 当前存量 + `+每60s速率`（速率为 0 时用灰色）。
 - 图标：`src/main/resources/assets/war_project/textures/gui/ammo.png`、`fuel.png`（均 128×128）。绘制要点：`GuiGraphics` 必须用 9 参数重载 `blit(rl, x, y, uOffset, vOffset, w, h, texW, texH)`，**已用 javap 反编译确认 `texW/texH` 参与 `fdiv` 归一化**，故 128 图能正确缩到 16×16；7 参数重载按 256×256 采样，对 128 图只显示左上 1/4，不可用。
 - 协议号演变：单通道 `war_project:main`，本迭代中依次升到 **`"4"`**（新增 C→S `SetNodeResourcePacket`（携带 ammo+fuel）时升到 `"3"`，新增 S→C `ResourceSyncPacket` 时升到 `"4"`）。两端必须同一个 jar。
 
@@ -79,3 +106,5 @@ memory_body_ids:
 - 旧档迁移后语义变化：旧的单值产出/存量在迁移后**只作为 ammo**，fuel 从 0 开始。
 - `resource list` / `game status` 只统计 `TeamData` 中仍存在的队伍；被删队伍的历史存量仍落盘但不显示。
 - 资源只是普通标量，暂无消耗方调用 `ResourceApi.spend`（除了 `resource take` 命令），消耗入口已就绪。
+
+> 模块改名注记（2026-09-20）：文中 `wargame` / `Wargame*` 已于该日更名为 `nodeLJYS` / `NodeLJYS*`（`NodeLJYSModule` 的 id 为 `"nodeLJYS"`），本文引用名已同步更新；本文其余内容为改名前的交接记录。

@@ -38,7 +38,7 @@
       "id": "client",
       "type": "frontend",
       "label": "客户端占领探测",
-      "sublabel": "WargameCaptureClient",
+      "sublabel": "NodeLJYSCaptureClient",
       "pos": [
         60,
         270
@@ -66,7 +66,7 @@
       "id": "registry",
       "type": "backend",
       "label": "ModuleRegistry",
-      "sublabel": "map / team / wargame",
+      "sublabel": "map / team / nodeLJYS",
       "pos": [
         780,
         60
@@ -91,9 +91,9 @@
       ]
     },
     {
-      "id": "wargame",
+      "id": "nodeLJYS",
       "type": "backend",
-      "label": "WargameService",
+      "label": "NodeLJYSService",
       "sublabel": "占领计时 · 20 tick",
       "pos": [
         780,
@@ -180,7 +180,7 @@
       "kind": "region",
       "label": "服务端领地状态",
       "wraps": [
-        "wargame",
+        "nodeLJYS",
         "mapdata",
         "teamdata"
       ]
@@ -197,13 +197,13 @@
     {
       "id": "dispatch",
       "from": "net",
-      "to": "wargame",
+      "to": "nodeLJYS",
       "label": "占领意图",
       "variant": "emphasis"
     },
     {
       "id": "apply",
-      "from": "wargame",
+      "from": "nodeLJYS",
       "to": "mapdata",
       "label": "改写阵营",
       "variant": "emphasis"
@@ -233,7 +233,7 @@
     {
       "id": "config",
       "from": "cfg",
-      "to": "wargame",
+      "to": "nodeLJYS",
       "label": "占领参数",
       "variant": "dashed"
     },
@@ -260,13 +260,13 @@
     {
       "id": "register-service",
       "from": "registry",
-      "to": "wargame",
+      "to": "nodeLJYS",
       "label": "注册 Tick 监听",
       "labelDy": 24
     },
     {
       "id": "read-teams",
-      "from": "wargame",
+      "from": "nodeLJYS",
       "to": "teamdata",
       "label": "读队伍 / 盟友",
       "labelDy": 24

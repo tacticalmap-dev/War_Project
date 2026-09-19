@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * Single source of truth for the game phase. Modules register a listener and react to phase changes
- * inside their own package, so the kernel never references resource or wargame code.
+ * inside their own package, so the kernel never references resource or nodeLJYS code.
  */
 public final class GameStateService {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -62,6 +62,15 @@ public final class GameStateService {
         if (target == null || target == current) {
             return new Transition(false, current, current);
         }
+        // Pre-listeners run while the old phase is still current, so they can capture the state the
+        // outgoing phase is about to invalidate: the recovery module backs the map up here.
+        for (Listener listener : List.copyOf(listeners)) {
+            try {
+                listener.onBeforeGamePhaseChanged(server, current, target);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("War Project game phase pre-listener failed: {} -> {}", current.id(), target.id(), exception);
+            }
+        }
         phase = target;
         for (Listener listener : List.copyOf(listeners)) {
             try {
@@ -74,6 +83,14 @@ public final class GameStateService {
     }
 
     public interface Listener {
+        /**
+         * Called before the phase actually changes. A listener that needs the outgoing phase's
+         * state (the recovery module snapshots the map here) must use this hook instead of
+         * {@link #onGamePhaseChanged}, which already runs under the new phase.
+         */
+        default void onBeforeGamePhaseChanged(MinecraftServer server, GamePhase from, GamePhase to) {
+        }
+
         void onGamePhaseChanged(MinecraftServer server, GamePhase from, GamePhase to);
     }
 

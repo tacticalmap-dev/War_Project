@@ -2,15 +2,16 @@ package com.flowingsun.war_project.net;
 
 import com.flowingsun.war_project.WarProject;
 import com.flowingsun.war_project.client.ClientMapState;
-import com.flowingsun.war_project.client.WargameCaptureHudState;
-import com.flowingsun.war_project.client.WargameCaptureNoticeHudState;
+import com.flowingsun.war_project.client.OutOfMapClientState;
+import com.flowingsun.war_project.client.NodeLJYSCaptureHudState;
+import com.flowingsun.war_project.client.NodeLJYSCaptureNoticeHudState;
 import com.flowingsun.war_project.map.MapDivideStateApi;
 import com.flowingsun.war_project.map.MapData;
 import com.flowingsun.war_project.team.TeamClientState;
 import com.flowingsun.war_project.team.TeamData;
-import com.flowingsun.war_project.wargame.CaptureProgressQueryApi;
-import com.flowingsun.war_project.wargame.NodeOccupationService;
-import com.flowingsun.war_project.wargame.WargameService;
+import com.flowingsun.war_project.nodeLJYS.CaptureProgressQueryApi;
+import com.flowingsun.war_project.nodeLJYS.NodeOccupationService;
+import com.flowingsun.war_project.nodeLJYS.NodeLJYSService;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -31,7 +32,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 public final class WarProjectNetwork {
-    private static final String PROTOCOL = "6";
+    private static final String PROTOCOL = "7";
     private static int packetId;
     private static SimpleChannel channel;
 
@@ -102,6 +103,11 @@ public final class WarProjectNetwork {
                 .encoder(ResourceSyncPacket::encode)
                 .decoder(ResourceSyncPacket::decode)
                 .consumerMainThread(ResourceSyncPacket::handle)
+                .add();
+        channel.messageBuilder(OutOfMapWarningPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OutOfMapWarningPacket::encode)
+                .decoder(OutOfMapWarningPacket::decode)
+                .consumerMainThread(OutOfMapWarningPacket::handle)
                 .add();
     }
 
@@ -192,6 +198,16 @@ public final class WarProjectNetwork {
     public static void sendNodeResources(String nodeId, double ammoPerMinute, double fuelPerMinute) {
         if (channel != null) {
             channel.sendToServer(new SetNodeResourcePacket(nodeId, ammoPerMinute, fuelPerMinute));
+        }
+    }
+
+    /**
+     * Tells one client that it left the map area ({@code remainingTicks} > 0) or returned (-1). The
+     * countdown itself runs client side; the server remains the authority that kills the player.
+     */
+    public static void sendOutOfMapWarning(ServerPlayer player, int remainingTicks) {
+        if (channel != null) {
+            channel.send(PacketDistributor.PLAYER.with(() -> player), new OutOfMapWarningPacket(remainingTicks));
         }
     }
 
@@ -343,7 +359,7 @@ public final class WarProjectNetwork {
             context.get().enqueueWork(() -> {
                 ServerPlayer sender = context.get().getSender();
                 if (sender != null) {
-                    WargameService.active().submitCaptureIntent(sender, packet.nodeId);
+                    NodeLJYSService.active().submitCaptureIntent(sender, packet.nodeId);
                 }
             });
             context.get().setPacketHandled(true);
@@ -463,7 +479,7 @@ public final class WarProjectNetwork {
         }
 
         static void handle(CaptureProgressPacket packet, Supplier<NetworkEvent.Context> context) {
-            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> WargameCaptureHudState.apply(packet)));
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> NodeLJYSCaptureHudState.apply(packet)));
             context.get().setPacketHandled(true);
         }
     }
@@ -482,7 +498,26 @@ public final class WarProjectNetwork {
         }
 
         static void handle(CaptureNoticePacket packet, Supplier<NetworkEvent.Context> context) {
-            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> WargameCaptureNoticeHudState.apply(packet.text, packet.color)));
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> NodeLJYSCaptureNoticeHudState.apply(packet.text, packet.color)));
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    /**
+     * {@code remainingTicks} &gt; 0 starts (or refreshes) the "return to the map area" countdown; -1 clears
+     * it. The countdown ticker runs client side, while the server stays the authority that kills.
+     */
+    public record OutOfMapWarningPacket(int remainingTicks) {
+        static void encode(OutOfMapWarningPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeInt(packet.remainingTicks);
+        }
+
+        static OutOfMapWarningPacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            return new OutOfMapWarningPacket(buffer.readInt());
+        }
+
+        static void handle(OutOfMapWarningPacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> OutOfMapClientState.apply(packet.remainingTicks)));
             context.get().setPacketHandled(true);
         }
     }

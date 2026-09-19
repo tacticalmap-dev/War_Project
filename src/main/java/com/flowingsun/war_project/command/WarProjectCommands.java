@@ -12,9 +12,11 @@ import com.flowingsun.war_project.resource.ResourceKind;
 import com.flowingsun.war_project.team.TeamApi;
 import com.flowingsun.war_project.team.TeamData;
 import com.flowingsun.war_project.team.TeamModule;
-import com.flowingsun.war_project.wargame.CaptureProgressQueryApi;
+import com.flowingsun.war_project.nodeLJYS.CaptureProgressQueryApi;
+import com.flowingsun.war_project.recovery.RecoveryApi;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -28,7 +30,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.border.WorldBorder;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -39,6 +41,13 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public final class WarProjectCommands {
+    /**
+     * Chunk coordinates are plain integers parsed by Brigadier's own {@link IntegerArgumentType}. A custom
+     * argument type would be unknown to {@code ArgumentTypeInfos}, and the login-time command-tree packet
+     * would then fail with "Couldn't place player in world" — that made every world unjoinable once.
+     */
+    private static final int MAX_CHUNK_COORDINATE = 30_000_000;
+
     private static final List<String> TEAM_MODIFY_PROPERTIES = List.of(
             "displayName",
             "color",
@@ -63,6 +72,7 @@ public final class WarProjectCommands {
                 .then(warzoneCommands())
                 .then(progressCommands())
                 .then(gameCommands())
+                .then(recoveryCommands())
                 .then(resourceCommands())
                 .then(teamCommands()));
     }
@@ -75,9 +85,12 @@ public final class WarProjectCommands {
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> mapCommands() {
         return Commands.literal("map")
                 .then(Commands.literal("set")
-                        .then(Commands.argument("from", StringArgumentType.word())
-                                .then(Commands.argument("to", StringArgumentType.word())
-                                        .executes(WarProjectCommands::mapSet))));
+                        .then(Commands.argument("fromX", IntegerArgumentType.integer(-MAX_CHUNK_COORDINATE, MAX_CHUNK_COORDINATE))
+                                .then(Commands.argument("fromZ", IntegerArgumentType.integer(-MAX_CHUNK_COORDINATE, MAX_CHUNK_COORDINATE))
+                                        .then(Commands.argument("toX", IntegerArgumentType.integer(-MAX_CHUNK_COORDINATE, MAX_CHUNK_COORDINATE))
+                                                .then(Commands.argument("toZ", IntegerArgumentType.integer(-MAX_CHUNK_COORDINATE, MAX_CHUNK_COORDINATE))
+                                                        .executes(WarProjectCommands::mapSet))))))
+                .then(Commands.literal("info").executes(WarProjectCommands::mapInfo));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> nodeCommands() {
@@ -252,15 +265,58 @@ public final class WarProjectCommands {
         return 1;
     }
 
+    /**
+     * Defines the playable map area. The rectangle is stored by the map module; the vanilla world border
+     * is never used as a hard boundary, so a leftover border is pushed back to its maximum size here.
+     */
     private static int mapSet(CommandContext<CommandSourceStack> context) {
-        ChunkPos from = parseChunkPos(StringArgumentType.getString(context, "from"));
-        ChunkPos to = parseChunkPos(StringArgumentType.getString(context, "to"));
-        int minX = Math.min(from.x, to.x);
-        int maxX = Math.max(from.x, to.x);
-        int minZ = Math.min(from.z, to.z);
-        int maxZ = Math.max(from.z, to.z);
-        context.getSource().sendSuccess(() -> Component.literal("Selected map rectangle " + minX + "," + minZ + " -> " + maxX + "," + maxZ), false);
+        int fromX = IntegerArgumentType.getInteger(context, "fromX");
+        int fromZ = IntegerArgumentType.getInteger(context, "fromZ");
+        int toX = IntegerArgumentType.getInteger(context, "toX");
+        int toZ = IntegerArgumentType.getInteger(context, "toZ");
+        MinecraftServer server = server(context);
+        MapData.SaveResult result = MapDivideStateApi.setBounds(server, fromX, fromZ, toX, toZ);
+        if (!result.ok()) {
+            return fail(context, result.message());
+        }
+        MapData.Bounds bounds = MapDivideStateApi.getBounds(server).orElseThrow();
+        boolean borderCleared = clearHardWorldBorder(server, bounds);
+        context.getSource().sendSuccess(() -> Component.literal("Map area set: " + describeBounds(bounds)
+                + (borderCleared ? " (vanilla world border reset to its maximum size)" : "")), true);
         return 1;
+    }
+
+    private static int mapInfo(CommandContext<CommandSourceStack> context) {
+        Optional<MapData.Bounds> bounds = MapDivideStateApi.getBounds(server(context));
+        if (bounds.isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.literal(
+                    "No map area set. Use /warproject map set <fromX,fromZ> <toX,toZ> with chunk coordinates."), false);
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Map area: " + describeBounds(bounds.get())), false);
+        return 1;
+    }
+
+    private static String describeBounds(MapData.Bounds bounds) {
+        return "chunks [" + bounds.minChunkX() + "," + bounds.minChunkZ() + "] -> ["
+                + bounds.maxChunkX() + "," + bounds.maxChunkZ() + "], blocks X["
+                + (long) bounds.minBlockX() + ", " + (long) bounds.maxBlockX() + ") Z["
+                + (long) bounds.minBlockZ() + ", " + (long) bounds.maxBlockZ() + "), "
+                + bounds.chunkCount() + " chunk(s)";
+    }
+
+    /**
+     * Out of map is a soft boundary: players may walk out and get a grace period instead of being
+     * blocked, so an old hard border from an earlier setup is removed once, at the map's centre.
+     */
+    private static boolean clearHardWorldBorder(MinecraftServer server, MapData.Bounds bounds) {
+        WorldBorder border = server.overworld().getWorldBorder();
+        if (border.getSize() >= WorldBorder.MAX_SIZE) {
+            return false;
+        }
+        border.setCenter((bounds.minBlockX() + bounds.maxBlockX()) * 0.5D, (bounds.minBlockZ() + bounds.maxBlockZ()) * 0.5D);
+        border.setSize(WorldBorder.MAX_SIZE);
+        return true;
     }
 
     private static int nodeList(CommandContext<CommandSourceStack> context) {
@@ -309,7 +365,7 @@ public final class WarProjectCommands {
             return fail(context, "Node not found: " + nodeId);
         }
         WarProjectNetwork.broadcastMap(server(context));
-        com.flowingsun.war_project.wargame.NodeOccupationService.clear(nodeId);
+        com.flowingsun.war_project.nodeLJYS.NodeOccupationService.clear(nodeId);
         success(context, "Node deleted: " + nodeId + " (its warzone was removed too)");
         return 1;
     }
@@ -372,6 +428,38 @@ public final class WarProjectCommands {
         if (!(source.getEntity() instanceof ServerPlayer)) {
             source.sendSuccess(() -> message, false);
         }
+        return 1;
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> recoveryCommands() {
+        return Commands.literal("recovery")
+                .then(Commands.literal("status").executes(WarProjectCommands::recoveryStatus))
+                .then(Commands.literal("snapshot").executes(WarProjectCommands::recoverySnapshot))
+                .then(Commands.literal("restore").executes(WarProjectCommands::recoveryRestore));
+    }
+
+    private static int recoveryStatus(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        String message = RecoveryApi.statusLine(source.getServer());
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int recoverySnapshot(CommandContext<CommandSourceStack> context) {
+        return recoveryResult(context, RecoveryApi.captureSnapshot(context.getSource().getServer()));
+    }
+
+    private static int recoveryRestore(CommandContext<CommandSourceStack> context) {
+        return recoveryResult(context, RecoveryApi.restoreSnapshot(context.getSource().getServer()));
+    }
+
+    private static int recoveryResult(CommandContext<CommandSourceStack> context, RecoveryApi.Outcome outcome) {
+        CommandSourceStack source = context.getSource();
+        if (!outcome.ok()) {
+            source.sendFailure(Component.literal(outcome.message()));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(outcome.message()), false);
         return 1;
     }
 
@@ -699,14 +787,6 @@ public final class WarProjectCommands {
                 + " node=" + tag.getString("node_id")
                 + " faction=" + tag.getString("faction_id")
                 + " chunks=" + tag.getList("chunks", Tag.TAG_COMPOUND).size();
-    }
-
-    private static ChunkPos parseChunkPos(String raw) {
-        String[] parts = raw.split(",", 2);
-        if (parts.length != 2) {
-            throw new IllegalArgumentException("Chunk coordinate must be x,z");
-        }
-        return new ChunkPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
 
     private static MinecraftServer server(CommandContext<CommandSourceStack> context) {

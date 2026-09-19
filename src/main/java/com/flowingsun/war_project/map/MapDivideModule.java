@@ -3,6 +3,7 @@ package com.flowingsun.war_project.map;
 import com.flowingsun.war_project.module.WarProjectModule;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
@@ -18,6 +19,14 @@ public final class MapDivideModule implements WarProjectModule {
     @Override
     public void onServerStarting(MinecraftServer server) {
         MapData.get(server).setDirty();
+        // Out-of-map enforcement is part of the map module: the area lives in MapData.
+        MinecraftForge.EVENT_BUS.register(MapBoundaryService.active());
+    }
+
+    @Override
+    public void onServerStopping(MinecraftServer server) {
+        MinecraftForge.EVENT_BUS.unregister(MapBoundaryService.active());
+        MapBoundaryService.clearActive();
     }
 
     @Override

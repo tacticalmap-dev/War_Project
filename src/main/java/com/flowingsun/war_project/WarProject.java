@@ -7,7 +7,8 @@ import com.flowingsun.war_project.module.WarProjectModule;
 import com.flowingsun.war_project.net.WarProjectNetwork;
 import com.flowingsun.war_project.resource.ResourceModule;
 import com.flowingsun.war_project.team.TeamModule;
-import com.flowingsun.war_project.wargame.WargameModule;
+import com.flowingsun.war_project.nodeLJYS.NodeLJYSModule;
+import com.flowingsun.war_project.recovery.RecoveryModule;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
@@ -40,7 +41,10 @@ public class WarProject {
                 new MapDivideModule(),
                 new TeamModule(),
                 new ResourceModule(),
-                new WargameModule()
+                new NodeLJYSModule(),
+                // Registered last on purpose: its end-of-game restore must run after the resource
+                // and node modules applied their own end-of-game resets.
+                new RecoveryModule()
         );
         this.moduleRegistry = new ModuleRegistry(modules);
         clientModuleRegistry = this.moduleRegistry;
@@ -75,6 +79,11 @@ public class WarProject {
     }
 
     @SubscribeEvent
+    public void onGameShuttingDown(net.minecraftforge.event.GameShuttingDownEvent event) {
+        com.flowingsun.war_project.client.web.WebRendererService.shutdown();
+    }
+
+    @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
             WarProjectNetwork.sendMap(player);
@@ -90,6 +99,8 @@ public class WarProject {
             if (clientModuleRegistry != null) {
                 clientModuleRegistry.onClientSetup(event);
             }
+            // Prepares the optional Chromium backend; it stays inactive until it is actually ready.
+            com.flowingsun.war_project.client.web.WebRendererService.init();
         }
     }
 }

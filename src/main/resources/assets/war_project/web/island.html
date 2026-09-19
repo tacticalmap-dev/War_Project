@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { position: absolute; left: 0; right: 0; top: 2px; display: flex; justify-content: center; }
+  /* No shadow on the island: it sits flat on the HUD. */
+  .island { display: flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px;
+    font-size: 9px; line-height: 1; white-space: nowrap; color: #fff;
+    background: #000000f0;
+    opacity: 0; transition: opacity .16s ease; }
+  .island.on { opacity: 1; }
+  .icon { width: 12px; height: 12px; display: block; }
+  .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rate { color: #7ce38b; font-variant-numeric: tabular-nums; }
+  .sep { width: 1px; height: 10px; background: #ffffff26; margin: 0 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="island" class="island">
+    <img id="ammoIcon" class="icon" src="__AMMO_ICON__" alt="">
+    <span id="ammo" class="amount">0</span><span id="ammoRate" class="rate">+0</span>
+    <div class="sep"></div>
+    <img id="fuelIcon" class="icon" src="__FUEL_ICON__" alt="">
+    <span id="fuel" class="amount">0</span><span id="fuelRate" class="rate">+0</span>
+  </div>
+</div>
+<script>
+  (function () {
+    var island = document.getElementById('island');
+    function text(id, value) { document.getElementById(id).textContent = value; }
+    window.wp = {
+      apply: function (snapshot) {
+        text('ammo', snapshot.ammo);
+        text('ammoRate', '+' + snapshot.ammoRate);
+        text('fuel', snapshot.fuel);
+        text('fuelRate', '+' + snapshot.fuelRate);
+        island.classList.toggle('on', !!(snapshot.running && snapshot.hasTeam));
+      }
+    };
+    if (typeof cefQuery === 'function') {
+      cefQuery({ request: JSON.stringify({ op: 'ready', ua: navigator.userAgent }),
+        onSuccess: function () { }, onFailure: function () { } });
+    }
+  })();
+</script>
+</body>
+</html>

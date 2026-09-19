@@ -1,6 +1,8 @@
 package com.flowingsun.war_project.client;
 
 import com.flowingsun.war_project.WarProject;
+import com.flowingsun.war_project.client.web.WebRenderer;
+import com.flowingsun.war_project.client.web.WebRendererService;
 import com.flowingsun.war_project.html.HtmlDocument;
 import com.flowingsun.war_project.html.HtmlLayout;
 import com.flowingsun.war_project.html.HtmlNode;
@@ -113,6 +115,7 @@ public final class ResourceTransferController {
 
     /** Client-side state hook used by ResourceClientState is not needed; kept for tests/debug. */
     public static void onResult(boolean ok, String message) {
+        WebRendererService.onTransferResult(ok, message);
         pending = false;
         noticeOk = ok;
         notice = message == null ? "" : message;
@@ -156,6 +159,11 @@ public final class ResourceTransferController {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
+        WebRendererService.tick();
+        if (WebRendererService.active() != null) {
+            // Chromium drives its own animation, message loop and input.
+            return;
+        }
         Minecraft minecraft = Minecraft.getInstance();
         long now = System.nanoTime();
         float deltaMs = lastNanos == 0L ? 16.0F : Math.min(120.0F, (now - lastNanos) / 1_000_000.0F);
@@ -183,6 +191,7 @@ public final class ResourceTransferController {
 
     @SubscribeEvent
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        WebRendererService.onDisconnect();
         close();
         ResourceIslandView.reset();
     }
@@ -195,7 +204,24 @@ public final class ResourceTransferController {
         }
         GuiGraphics graphics = event.getGuiGraphics();
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        ResourceIslandView.render(graphics, screenWidth);
+        // The island stays on screen for the chat screen only: that is where it is clicked to open the
+        // transfer panel. Every other screen (inventory, ESC, JEI, ...) hides it.
+        boolean chatOpen = minecraft.screen instanceof ChatScreen;
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (chatOpen) {
+                web.renderIsland(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight());
+            }
+            if (web.isPanelOpen()) {
+                web.renderPanel(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight(),
+                        (int) event.getMouseX(), (int) event.getMouseY());
+            }
+            return;
+        }
+        // Built in renderer: same rule.
+        if (chatOpen) {
+            ResourceIslandView.render(graphics, screenWidth);
+        }
         if (!open) {
             return;
         }
@@ -228,6 +254,13 @@ public final class ResourceTransferController {
         }
         double mouseX = event.getMouseX();
         double mouseY = event.getMouseY();
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (web.mousePressed(mouseX, mouseY, event.getButton())) {
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (open) {
             if (event.getButton() == 0) {
                 if (host().contains(mouseX, mouseY)) {
@@ -239,7 +272,8 @@ public final class ResourceTransferController {
             }
             return;
         }
-        if (event.getButton() == 1) {
+        if (event.getButton() == 0) {
+            // Left click on an icon opens the transfer panel.
             ResourceKind icon = ResourceIslandView.iconAt(mouseX, mouseY);
             if (icon != null) {
                 openPanel(icon, mouseX, mouseY);
@@ -250,6 +284,13 @@ public final class ResourceTransferController {
 
     @SubscribeEvent
     public static void onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (web.mouseReleased(event.getMouseX(), event.getMouseY(), event.getButton())) {
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (!open || event.getButton() != 0) {
             return;
         }
@@ -261,6 +302,13 @@ public final class ResourceTransferController {
 
     @SubscribeEvent
     public static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (web.mouseScrolled(event.getMouseX(), event.getMouseY(), event.getScrollDelta())) {
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (!open || !host().contains(event.getMouseX(), event.getMouseY())) {
             return;
         }
@@ -272,6 +320,13 @@ public final class ResourceTransferController {
 
     @SubscribeEvent
     public static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (web.keyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers())) {
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (!open) {
             return;
         }
@@ -294,6 +349,13 @@ public final class ResourceTransferController {
 
     @SubscribeEvent
     public static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
+        WebRenderer web = WebRendererService.active();
+        if (web != null) {
+            if (web.charTyped(event.getCodePoint())) {
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (!open) {
             return;
         }

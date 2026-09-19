@@ -4,11 +4,29 @@ title: "世界地图叠加层亚像素线宽：POSITION_COLOR 浮点 quad 取代
 description: "世界地图叠加层改用自建 POSITION_COLOR 浮点 quad 实现亚像素线宽（EDGE_WIDTH=0.5）的设计与字节码证据；取代 d33309cb / 8eb90438 中「用 fill 绘制、1px 是下限」的记载。改该渲染前先读本文。"
 status: "active"
 created_at: "2026-09-18T21:14:32.775Z"
+updated_at: "2026-09-19T19:33:38.649Z"
+content_hash: "a2355115304a7c864175b18bfbae219801e10a97557d791facb5200c225941a4"
+source_paths:
+  - "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java"
+  - "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java"
+session_ids:
+  - "f003a139-913a-4204-aa6a-3caba1ae5680"
+  - "session-f7acdd28-0b0d-4e91-b421-d75c5ff31933"
+memory_body_ids:
+  []
+---
+
+---
+id: "465b774a-b054-4ad1-a532-bd28c94919f7"
+title: "世界地图叠加层亚像素线宽：POSITION_COLOR 浮点 quad 取代 GuiGraphics.fill"
+description: "世界地图叠加层改用自建 POSITION_COLOR 浮点 quad 实现亚像素线宽（EDGE_WIDTH=0.5）的设计与字节码证据；取代 d33309cb / 8eb90438 中「用 fill 绘制、1px 是下限」的记载。改该渲染前先读本文。"
+status: "active"
+created_at: "2026-09-18T21:14:32.775Z"
 updated_at: "2026-09-18T21:14:32.775Z"
 content_hash: "c5d9ff3556af1ad83aec5007e9b1d7f5aabcf06736dbf3a3fb66a8f4663dc598"
 source_paths:
   - "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java"
-  - "src/main/java/com/flowingsun/war_project/client/WargameCaptureHudOverlay.java"
+  - "src/main/java/com/flowingsun/war_project/client/NodeLJYSCaptureHudOverlay.java"
   - "src/main/java/com/flowingsun/war_project/client/xaero/XaeroWarProjectMapRenderer.java"
 session_ids:
   - "f003a139-913a-4204-aa6a-3caba1ae5680"
@@ -89,7 +107,7 @@ memory_body_ids:
   **0 顶点空批安全**（不必为「有数据但全在屏幕外」的帧做特殊处理）。
 - `BufferUploader.drawWithShader(BufferBuilder$RenderedBuffer)` 存在。
 - `vertex(Matrix4f,float,float,float)` 走 `VertexConsumer` 接口（`javap` 不列继承方法）；
-  该调用链在本项目 `client/WargameCaptureHudOverlay.drawRingSegment` 中已实际运行，
+  该调用链在本项目 `client/NodeLJYSCaptureHudOverlay.drawRingSegment` 中已实际运行，
   是同一套已验证写法（`RenderSystem.setShader(GameRenderer::getPositionColorShader)` +
   `enableBlend` + `defaultBlendFunc`）。
 - 注意：绘制完成后**不要** `RenderSystem.disableBlend()`，否则随后绘制的节点名称会丢失 alpha 混合。
@@ -125,3 +143,5 @@ memory_body_ids:
 - 不改颜色口径、战区外轮廓规则、node 优先级语义、`DashPattern` 公式与 dash 相位锚定。
 - 不改占领 HUD、FTB 编辑器、小地图两条渲染路径与 FBO 注入。
 - 不调整世界地图投影公式（仍反射读 `cameraX` / `cameraZ` / `scale` / `screenScale`）。
+
+> 模块改名注记（2026-09-20）：文中 `wargame` / `Wargame*` 已于该日更名为 `nodeLJYS` / `NodeLJYS*`（`NodeLJYSModule` 的 id 为 `"nodeLJYS"`），本文引用名已同步更新；本文其余内容为改名前的交接记录。

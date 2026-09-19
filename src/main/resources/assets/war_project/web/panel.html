@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; color: #e8eef7;
+    -webkit-font-smoothing: antialiased; font-size: 9px; }
+  .panel { position: absolute; left: 3px; top: 3px; right: 3px; bottom: 3px;
+    display: none; flex-direction: column; gap: 4px; padding: 7px; border-radius: 8px;
+    background: linear-gradient(180deg, #1a2230f7, #0c1118fb);
+    box-shadow: 0 2px 7px #000000a6, 0 7px 16px #00000059, inset 0 1px 0 #ffffff24, inset 0 0 0 1px #ffffff1a;
+    opacity: 0; transform: scale(.97); transition: opacity .16s ease, transform .16s ease; }
+  .panel.on { display: flex; opacity: 1; transform: scale(1); }
+  .title { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600; }
+  .sub { font-size: 9px; color: #8fa3bb; font-weight: 400; }
+  .roster { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+  .roster::-webkit-scrollbar { width: 4px; }
+  .roster::-webkit-scrollbar-thumb { background: #ffffff26; border-radius: 2px; }
+  .row { display: flex; align-items: center; gap: 5px; padding: 2px 5px; border-radius: 5px;
+    cursor: pointer; transition: background .12s ease; }
+  .row:hover { background: #26324a; }
+  .row.sel { background: #1f3a5f; box-shadow: inset 0 0 0 1px #3f7fd6; }
+  .row.off { opacity: .42; cursor: default; }
+  .name { flex: 1; }
+  .val { color: #9ecbff; font-size: 9px; font-variant-numeric: tabular-nums; }
+  .entry { display: flex; align-items: center; gap: 5px; }
+  .label { color: #9aa4af; font-size: 9px; }
+  input { flex: 1; min-width: 0; background: #070a0f; border: 1px solid #ffffff26; border-radius: 5px;
+    color: #fff; padding: 2px 5px; font-size: 9px; outline: none; font-family: inherit;
+    font-variant-numeric: tabular-nums; }
+  input:focus { border-color: #3f7fd6; box-shadow: 0 0 0 2px #3f7fd633; }
+  .actions { display: flex; gap: 5px; }
+  button { flex: 1; border: 0; border-radius: 6px; padding: 4px 6px; font-size: 9px; color: #fff;
+    background: #232a34; cursor: pointer; font-family: inherit; transition: filter .12s ease; }
+  button:hover { filter: brightness(1.18); }
+  button.primary { background: linear-gradient(180deg, #2b7ffb, #1f6feb); }
+  button:disabled { opacity: .5; cursor: default; filter: none; }
+  .result { min-height: 11px; font-size: 9px; color: #9aa4af; }
+  .result.ok { color: #7ce38b; }
+  .result.fail { color: #ff8f8f; }
+</style>
+</head>
+<body>
+<div id="panel" class="panel">
+  <div class="title"><span id="title">转移</span><span id="held" class="sub"></span></div>
+  <div id="roster" class="roster"></div>
+  <div class="entry">
+    <span class="label">数量</span>
+    <input id="amount" type="text" inputmode="numeric" value="1">
+    <span id="limit" class="label">上限 0</span>
+  </div>
+  <div class="actions">
+    <button id="confirm" class="primary">确认</button>
+    <button id="cancel">取消</button>
+  </div>
+  <div id="result" class="result"></div>
+</div>
+<script>
+  (function () {
+    var panel = document.getElementById('panel');
+    var roster = document.getElementById('roster');
+    var amount = document.getElementById('amount');
+    var confirmButton = document.getElementById('confirm');
+    var result = document.getElementById('result');
+    var snapshot = { teammates: [] };
+    var kind = 'ammo';
+    var selected = null;
+    var pending = false;
+    var closeTimer = 0;
+
+    function translate(message) {
+      if (!message) { return ''; }
+      var rules = [
+        [/unknown resource kind/i, '未知的资源类型。'],
+        [/paused/i, '游戏未开始，转移已暂停。'],
+        [/greater than 0/i, '数量必须大于 0。'],
+        [/pick a teammate/i, '请先选择一名队友。'],
+        [/not online/i, '对方不在线。'],
+        [/not in your team/i, '对方不在你的队伍中。'],
+        [/not enough/i, '你的余额不足。'],
+        [/can only receive/i, '对方可接收的数量不足。'],
+        [/balance changed/i, '余额发生变化，请重试。']
+      ];
+      for (var i = 0; i < rules.length; i++) {
+        if (rules[i][0].test(message)) { return rules[i][1]; }
+      }
+      return message;
+    }
+
+    function query(payload) {
+      try {
+        if (typeof cefQuery === 'function') {
+          cefQuery({ request: JSON.stringify(payload), onSuccess: function () { }, onFailure: function () { } });
+        }
+      } catch (error) { /* not inside Chromium */ }
+    }
+
+    function stockOf(member) { return kind === 'fuel' ? member.fuel : member.ammo; }
+    function rateOf() { return kind === 'fuel' ? snapshot.fuelRate : snapshot.ammoRate; }
+    function heldOf() { return kind === 'fuel' ? snapshot.fuel : snapshot.ammo; }
+    function kindName() { return kind === 'fuel' ? '燃料' : '弹药'; }
+    function selectedMember() {
+      for (var i = 0; i < snapshot.teammates.length; i++) {
+        if (snapshot.teammates[i].name === selected) { return snapshot.teammates[i]; }
+      }
+      return null;
+    }
+    function maxAmount() {
+      var limit = heldOf();
+      var member = selectedMember();
+      if (member) { limit = Math.min(limit, 999 - stockOf(member)); }
+      return Math.max(0, Math.min(999, limit));
+    }
+
+    function render() {
+      document.getElementById('title').textContent = '转移' + kindName();
+      document.getElementById('held').textContent = '持有 ' + heldOf() + ' · +' + rateOf() + '/分';
+      roster.innerHTML = '';
+      if (!snapshot.teammates.length) {
+        var empty = document.createElement('div');
+        empty.className = 'row off';
+        empty.textContent = '没有在线队友';
+        roster.appendChild(empty);
+      }
+      snapshot.teammates.forEach(function (member) {
+        var row = document.createElement('div');
+        row.className = 'row' + (member.name === selected ? ' sel' : '') + (member.online ? '' : ' off');
+        var name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = member.name + (member.online ? '' : '（离线）');
+        var values = document.createElement('div');
+        values.className = 'val';
+        values.textContent = '弹 ' + member.ammo + ' · 燃 ' + member.fuel;
+        row.appendChild(name);
+        row.appendChild(values);
+        if (member.online) {
+          row.addEventListener('click', function () {
+            selected = member.name;
+            amount.value = '1';
+            render();
+          });
+        }
+        roster.appendChild(row);
+      });
+      var limit = maxAmount();
+      document.getElementById('limit').textContent = '上限 ' + limit;
+      var value = parseInt(amount.value, 10);
+      if (isNaN(value) || value < 1) { amount.value = limit > 0 ? '1' : '0'; }
+      confirmButton.disabled = pending || !selected || maxAmount() <= 0;
+    }
+
+    function submit() {
+      if (pending || !selected) { return; }
+      var value = parseInt(amount.value, 10);
+      var limit = maxAmount();
+      if (isNaN(value) || value < 1 || value > limit) {
+        result.className = 'result fail';
+        result.textContent = '请输入 1 到 ' + limit + ' 之间的数量。';
+        return;
+      }
+      pending = true;
+      result.className = 'result';
+      result.textContent = '正在向 ' + selected + ' 转移 ' + value + ' ' + kindName() + '…';
+      confirmButton.disabled = true;
+      query({ op: 'transfer', target: selected, kind: kind, amount: value });
+    }
+
+    function cancel() {
+      pending = false;
+      query({ op: 'cancel' });
+    }
+
+    window.wp = {
+      apply: function (next) { snapshot = next; render(); },
+      openPanel: function (options) {
+        kind = options.kind === 'fuel' ? 'fuel' : 'ammo';
+        selected = null;
+        pending = false;
+        result.className = 'result';
+        result.textContent = '';
+        if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = 0; }
+        panel.classList.add('on');
+        amount.value = '1';
+        render();
+        amount.focus();
+        amount.select();
+      },
+      closePanel: function () {
+        panel.classList.remove('on');
+        pending = false;
+      },
+      result: function (outcome) {
+        pending = false;
+        if (outcome.ok) {
+          result.className = 'result ok';
+          result.textContent = '已向 ' + selected + ' 转移 ' + amount.value + ' ' + kindName() + '。';
+          render();
+          closeTimer = window.setTimeout(function () { query({ op: 'close' }); }, 900);
+          return;
+        }
+        result.className = 'result fail';
+        result.textContent = translate(outcome.message);
+        render();
+      }
+    };
+
+    confirmButton.addEventListener('click', submit);
+    document.getElementById('cancel').addEventListener('click', cancel);
+    amount.addEventListener('input', function () {
+      amount.value = amount.value.replace(/[^0-9]/g, '').slice(0, 3);
+    });
+    amount.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); submit(); }
+      if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+    });
+  })();
+</script>
+</body>
+</html>
