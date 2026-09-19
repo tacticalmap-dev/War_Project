@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 public final class WarProjectNetwork {
-    private static final String PROTOCOL = "4";
+    private static final String PROTOCOL = "6";
     private static int packetId;
     private static SimpleChannel channel;
 
@@ -87,6 +87,16 @@ public final class WarProjectNetwork {
                 .encoder(SetNodeResourcePacket::encode)
                 .decoder(SetNodeResourcePacket::decode)
                 .consumerMainThread(SetNodeResourcePacket::handle)
+                .add();
+        channel.messageBuilder(TransferResourcePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+                .encoder(TransferResourcePacket::encode)
+                .decoder(TransferResourcePacket::decode)
+                .consumerMainThread(TransferResourcePacket::handle)
+                .add();
+        channel.messageBuilder(TransferResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(TransferResultPacket::encode)
+                .decoder(TransferResultPacket::decode)
+                .consumerMainThread(TransferResultPacket::handle)
                 .add();
         channel.messageBuilder(ResourceSyncPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(ResourceSyncPacket::encode)
@@ -167,9 +177,15 @@ public final class WarProjectNetwork {
         }
     }
 
-    public static void broadcastResources(ResourceSyncPacket packet) {
+    public static void sendTransfer(String targetName, String kindId, double amount) {
         if (channel != null) {
-            channel.send(PacketDistributor.ALL.noArg(), packet);
+            channel.sendToServer(new TransferResourcePacket(targetName, kindId, amount));
+        }
+    }
+
+    public static void sendTransferResult(ServerPlayer player, boolean ok, String message) {
+        if (channel != null) {
+            channel.send(PacketDistributor.PLAYER.with(() -> player), new TransferResultPacket(ok, message));
         }
     }
 
@@ -216,31 +232,39 @@ public final class WarProjectNetwork {
     }
 
     /**
-     * S→C resource snapshot: whether the game is RUNNING plus, for every existing team, both
-     * stockpiles and the per-60s income contributed by that team's nodes.
+     * S→C personal resource snapshot: whether the game is RUNNING, whether the player has a team,
+     * the player's own stockpile and the per-60s income of that player's team.
      */
-    public record ResourceSyncPacket(boolean running, List<ResourceTeamEntry> teams) {
+    public record ResourceSyncPacket(boolean running, boolean hasTeam, double ammo, double fuel,
+                                     double ammoPerMinute, double fuelPerMinute, List<TeamMemberEntry> teammates) {
         static void encode(ResourceSyncPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
             buffer.writeBoolean(packet.running);
-            buffer.writeVarInt(packet.teams.size());
-            for (ResourceTeamEntry entry : packet.teams) {
-                buffer.writeUtf(entry.teamId(), 64);
+            buffer.writeBoolean(packet.hasTeam);
+            buffer.writeDouble(packet.ammo);
+            buffer.writeDouble(packet.fuel);
+            buffer.writeDouble(packet.ammoPerMinute);
+            buffer.writeDouble(packet.fuelPerMinute);
+            buffer.writeVarInt(packet.teammates.size());
+            for (TeamMemberEntry entry : packet.teammates) {
+                buffer.writeUtf(entry.name(), 64);
                 buffer.writeDouble(entry.ammo());
                 buffer.writeDouble(entry.fuel());
-                buffer.writeDouble(entry.ammoPerMinute());
-                buffer.writeDouble(entry.fuelPerMinute());
             }
         }
 
         static ResourceSyncPacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
             boolean running = buffer.readBoolean();
+            boolean hasTeam = buffer.readBoolean();
+            double ammo = buffer.readDouble();
+            double fuel = buffer.readDouble();
+            double ammoPerMinute = buffer.readDouble();
+            double fuelPerMinute = buffer.readDouble();
             int count = buffer.readVarInt();
-            List<ResourceTeamEntry> teams = new ArrayList<>();
+            List<TeamMemberEntry> teammates = new ArrayList<>();
             for (int i = 0; i < count; i++) {
-                teams.add(new ResourceTeamEntry(buffer.readUtf(64), buffer.readDouble(), buffer.readDouble(),
-                        buffer.readDouble(), buffer.readDouble()));
+                teammates.add(new TeamMemberEntry(buffer.readUtf(64), buffer.readDouble(), buffer.readDouble()));
             }
-            return new ResourceSyncPacket(running, List.copyOf(teams));
+            return new ResourceSyncPacket(running, hasTeam, ammo, fuel, ammoPerMinute, fuelPerMinute, List.copyOf(teammates));
         }
 
         static void handle(ResourceSyncPacket packet, Supplier<NetworkEvent.Context> context) {
@@ -249,7 +273,61 @@ public final class WarProjectNetwork {
         }
     }
 
-    public record ResourceTeamEntry(String teamId, double ammo, double fuel, double ammoPerMinute, double fuelPerMinute) {
+    /** One teammate's stockpile, shipped alongside the local player's own snapshot. */
+    public record TeamMemberEntry(String name, double ammo, double fuel) {
+    }
+
+    /** C→S: move resources from the sender to another online member of the same team. */
+    public record TransferResourcePacket(String targetName, String kindId, double amount) {
+        static void encode(TransferResourcePacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeUtf(packet.targetName == null ? "" : packet.targetName, 64);
+            buffer.writeUtf(packet.kindId == null ? "" : packet.kindId, 16);
+            buffer.writeDouble(packet.amount);
+        }
+
+        static TransferResourcePacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            return new TransferResourcePacket(buffer.readUtf(64), buffer.readUtf(16), buffer.readDouble());
+        }
+
+        static void handle(TransferResourcePacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> {
+                ServerPlayer sender = context.get().getSender();
+                if (sender == null) {
+                    return;
+                }
+                MinecraftServer server = sender.getServer();
+                if (server == null) {
+                    return;
+                }
+                java.util.Optional<com.flowingsun.war_project.resource.ResourceKind> kind =
+                        com.flowingsun.war_project.resource.ResourceKind.parse(packet.kindId);
+                if (kind.isEmpty()) {
+                    sendTransferResult(sender, false, "Unknown resource kind: " + packet.kindId);
+                    return;
+                }
+                com.flowingsun.war_project.resource.ResourceApi.TransferOutcome outcome =
+                        com.flowingsun.war_project.resource.ResourceApi.transfer(server, sender, packet.targetName, kind.get(), packet.amount);
+                sendTransferResult(sender, outcome.ok(), outcome.message());
+            });
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    /** S→C: transfer verdict, drives the panel's success/failure state. */
+    public record TransferResultPacket(boolean ok, String message) {
+        static void encode(TransferResultPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeBoolean(packet.ok);
+            buffer.writeUtf(packet.message == null ? "" : packet.message, 256);
+        }
+
+        static TransferResultPacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            return new TransferResultPacket(buffer.readBoolean(), buffer.readUtf(256));
+        }
+
+        static void handle(TransferResultPacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> com.flowingsun.war_project.client.ResourceTransferController.onResult(packet.ok(), packet.message())));
+            context.get().setPacketHandled(true);
+        }
     }
 
     public record CaptureIntentPacket(String nodeId) {

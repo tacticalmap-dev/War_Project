@@ -1,26 +1,30 @@
 package com.flowingsun.war_project.resource;
 
 import com.flowingsun.war_project.team.TeamData;
+import com.mojang.logging.LogUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.slf4j.Logger;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Persisted per-team stockpile of both resources (war_project_resources):
- * teams[] = {id, ammo, fuel}. Amounts are plain scalars; the game phase is not stored here.
+ * Persisted per-player stockpile of both resources (war_project_resources):
+ * players[] = {id, ammo, fuel}. Keys are scoreboard names, matching TeamData membership. The legacy
+ * per-team section of older saves is intentionally dropped: resources are personal now.
  */
 public final class ResourceData extends SavedData {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final String NAME = "war_project_resources";
 
     /**
-     * Hard ceiling for both resources. It applies to settlement, admin writes and NBT loading, so a
-     * team stockpile can never exceed 999 even if an older save or a datapack said otherwise.
+     * Hard ceiling for both resources. It applies to settlement, admin writes, transfers and NBT
+     * loading, so a player stockpile can never exceed 999.
      */
     public static final double MAX_AMOUNT = 999.0D;
 
@@ -32,69 +36,70 @@ public final class ResourceData extends SavedData {
 
     public static ResourceData load(CompoundTag tag) {
         ResourceData data = new ResourceData();
-        ListTag teamTags = tag.getList("teams", Tag.TAG_COMPOUND);
-        for (Tag raw : teamTags) {
+        ListTag playerTags = tag.getList("players", Tag.TAG_COMPOUND);
+        for (Tag raw : playerTags) {
             CompoundTag entry = (CompoundTag) raw;
-            String id = TeamData.cleanId(entry.getString("id"));
-            if (!TeamData.validId(id)) {
+            String id = cleanPlayer(entry.getString("id"));
+            if (!validPlayer(id)) {
                 continue;
             }
-            // "amount" was the pre-split single-resource key: keep old saves usable as ammo.
-            double ammo = normalize(entry.contains("ammo") ? entry.getDouble("ammo") : entry.getDouble("amount"));
-            data.stocks.put(id, new Stock(ammo, normalize(entry.getDouble("fuel"))));
+            data.stocks.put(id, new Stock(normalize(entry.getDouble("ammo")), normalize(entry.getDouble("fuel"))));
+        }
+        if (!tag.getList("teams", Tag.TAG_COMPOUND).isEmpty()) {
+            LOGGER.info("Ignoring the legacy team resource section: resources are per player now");
         }
         return data;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag) {
-        ListTag teamTags = new ListTag();
+        ListTag playerTags = new ListTag();
         for (Map.Entry<String, Stock> entry : stocks.entrySet()) {
             CompoundTag value = new CompoundTag();
             value.putString("id", entry.getKey());
             value.putDouble("ammo", entry.getValue().ammo());
             value.putDouble("fuel", entry.getValue().fuel());
-            teamTags.add(value);
+            playerTags.add(value);
         }
-        tag.put("teams", teamTags);
+        tag.put("players", playerTags);
         return tag;
     }
 
-    public Stock stock(String teamId) {
-        Stock value = stocks.get(TeamData.cleanId(teamId));
+    public Stock stock(String playerName) {
+        Stock value = stocks.get(cleanPlayer(playerName));
         return value == null ? Stock.empty() : value;
     }
 
-    public double amount(String teamId, ResourceKind kind) {
-        return kind == null ? 0.0D : stock(teamId).get(kind);
+    public double amount(String playerName, ResourceKind kind) {
+        return kind == null ? 0.0D : stock(playerName).get(kind);
     }
 
-    public void setAmount(String teamId, ResourceKind kind, double value) {
-        String clean = TeamData.cleanId(teamId);
-        if (!TeamData.validId(clean) || kind == null) {
+    public void setAmount(String playerName, ResourceKind kind, double value) {
+        String clean = cleanPlayer(playerName);
+        if (!validPlayer(clean) || kind == null) {
             return;
         }
         stocks.put(clean, stock(clean).with(kind, normalize(value)));
         setDirty();
     }
 
-    public void addAmount(String teamId, ResourceKind kind, double delta) {
-        String clean = TeamData.cleanId(teamId);
-        if (!TeamData.validId(clean) || kind == null) {
+    public void addAmount(String playerName, ResourceKind kind, double delta) {
+        String clean = cleanPlayer(playerName);
+        if (!validPlayer(clean) || kind == null) {
             return;
         }
         stocks.put(clean, stock(clean).with(kind, normalize(stock(clean).get(kind) + delta)));
         setDirty();
     }
 
-    /** Applies one settlement pass: per-team ammo/fuel deltas in a single dirty mark. */
-    public void addStocks(Map<String, Stock> gains) {
+    /** Applies one settlement pass: per-player ammo/fuel deltas in a single dirty mark. */
+    public void addStocksForPlayers(Map<String, Stock> gains) {
         if (gains.isEmpty()) {
             return;
         }
         for (Map.Entry<String, Stock> gain : gains.entrySet()) {
-            String clean = TeamData.cleanId(gain.getKey());
-            if (!TeamData.validId(clean)) {
+            String clean = cleanPlayer(gain.getKey());
+            if (!validPlayer(clean)) {
                 continue;
             }
             Stock current = stock(clean);
@@ -104,10 +109,10 @@ public final class ResourceData extends SavedData {
         setDirty();
     }
 
-    public boolean spend(String teamId, ResourceKind kind, double cost) {
-        String clean = TeamData.cleanId(teamId);
+    public boolean spend(String playerName, ResourceKind kind, double cost) {
+        String clean = cleanPlayer(playerName);
         double value = normalize(cost);
-        if (!TeamData.validId(clean) || kind == null || value <= 0.0D) {
+        if (!validPlayer(clean) || kind == null || value <= 0.0D) {
             return false;
         }
         double current = stock(clean).get(kind);
@@ -131,11 +136,11 @@ public final class ResourceData extends SavedData {
         return stocks.size();
     }
 
-    public Set<String> teamIds() {
+    public Set<String> playerNames() {
         return Set.copyOf(stocks.keySet());
     }
 
-    /** Clamps an amount into [0, MAX_AMOUNT]; null-safe replacement for a plain bounds check. */
+    /** Clamps an amount into [0, MAX_AMOUNT]. */
     private static double normalize(double value) {
         if (!Double.isFinite(value) || value <= 0.0D) {
             return 0.0D;
@@ -143,7 +148,15 @@ public final class ResourceData extends SavedData {
         return Math.min(value, MAX_AMOUNT);
     }
 
-    /** Immutable per-team pair of resource amounts. */
+    private static String cleanPlayer(String playerName) {
+        return TeamData.cleanPlayer(playerName);
+    }
+
+    private static boolean validPlayer(String playerName) {
+        return playerName != null && !playerName.isBlank() && playerName.length() <= 64;
+    }
+
+    /** Immutable pair of resource amounts. */
     public record Stock(double ammo, double fuel) {
         public static Stock empty() {
             return new Stock(0.0D, 0.0D);

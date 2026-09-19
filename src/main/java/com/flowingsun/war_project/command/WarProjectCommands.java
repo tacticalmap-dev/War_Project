@@ -145,23 +145,28 @@ public final class WarProjectCommands {
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> resourceCommands() {
         return Commands.literal("resource")
                 .then(Commands.literal("list").executes(WarProjectCommands::resourceList))
-                .then(Commands.literal("team")
-                        .then(Commands.argument("team", StringArgumentType.word())
-                                .suggests(WarProjectCommands::suggestTeams)
-                                .executes(WarProjectCommands::resourceTeam)))
+                .then(Commands.literal("player")
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests(WarProjectCommands::suggestKnownPlayers)
+                                .executes(WarProjectCommands::resourcePlayer)))
                 .then(resourceModifyCommands("set"))
                 .then(resourceModifyCommands("add"))
-                .then(resourceModifyCommands("take"));
+                .then(resourceModifyCommands("take"))
+                .then(resourceModifyCommands("transfer"));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> resourceModifyCommands(String action) {
         return Commands.literal(action)
-                .then(Commands.argument("team", StringArgumentType.word())
-                        .suggests(WarProjectCommands::suggestTeams)
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .suggests(WarProjectCommands::suggestKnownPlayers)
                         .then(Commands.argument("kind", StringArgumentType.word())
                                 .suggests(WarProjectCommands::suggestResourceKinds)
                                 .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.0D))
                                         .executes(context -> resourceModify(context, action)))));
+    }
+
+    private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestKnownPlayers(CommandContext<CommandSourceStack> context, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(ResourceApi.playerStocks(server(context)).keySet(), builder);
     }
 
     private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestResourceKinds(CommandContext<CommandSourceStack> context, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
@@ -373,7 +378,7 @@ public final class WarProjectCommands {
     private static int gameStatus(CommandContext<CommandSourceStack> context) {
         MinecraftServer server = server(context);
         GamePhase phase = GameStateService.active().phase();
-        Map<String, ResourceData.Stock> stocks = ResourceApi.stocks(server);
+        Map<String, ResourceData.Stock> stocks = ResourceApi.playerStocks(server);
         int nodesWithOutput = 0;
         for (MapData.Node node : MapData.get(server).nodes()) {
             if (MapData.isFaction(node.factionId())
@@ -388,16 +393,17 @@ public final class WarProjectCommands {
             fuel += stock.fuel();
         }
         String message = String.format(java.util.Locale.ROOT,
-                "Game phase=%s settleInterval=%.2fs teams=%d nodesWithOutput=%d ammo=%.2f fuel=%.2f",
-                phase.id(), Config.resourceSettleIntervalSeconds, stocks.size(), nodesWithOutput, ammo, fuel);
+                "Game phase=%s settleInterval=%.2fs onlinePlayers=%d trackedPlayers=%d nodesWithOutput=%d ammo=%.2f fuel=%.2f",
+                phase.id(), Config.resourceSettleIntervalSeconds, server.getPlayerList().getPlayers().size(),
+                stocks.size(), nodesWithOutput, ammo, fuel);
         context.getSource().sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
 
     private static int resourceList(CommandContext<CommandSourceStack> context) {
-        Map<String, ResourceData.Stock> stocks = ResourceApi.stocks(server(context));
+        Map<String, ResourceData.Stock> stocks = ResourceApi.playerStocks(server(context));
         if (stocks.isEmpty()) {
-            context.getSource().sendSuccess(() -> Component.literal("No teams."), false);
+            context.getSource().sendSuccess(() -> Component.literal("No tracked players."), false);
             return 0;
         }
         String joined = stocks.entrySet().stream()
@@ -408,19 +414,19 @@ public final class WarProjectCommands {
         return stocks.size();
     }
 
-    private static int resourceTeam(CommandContext<CommandSourceStack> context) {
-        String team = StringArgumentType.getString(context, "team");
-        if (!ResourceApi.teamExists(server(context), team)) {
-            return fail(context, "Team not found: " + team);
+    private static int resourcePlayer(CommandContext<CommandSourceStack> context) {
+        String player = StringArgumentType.getString(context, "player");
+        if (!ResourceApi.playerKnown(server(context), player)) {
+            return fail(context, "Player not tracked: " + player);
         }
-        ResourceData.Stock stock = ResourceApi.stock(server(context), team);
-        context.getSource().sendSuccess(() -> Component.literal("Team " + team + " resources: ammo="
+        ResourceData.Stock stock = ResourceApi.stock(server(context), player);
+        context.getSource().sendSuccess(() -> Component.literal("Player " + player + " resources: ammo="
                 + formatAmount(stock.ammo()) + ", fuel=" + formatAmount(stock.fuel())), false);
         return 1;
     }
 
     private static int resourceModify(CommandContext<CommandSourceStack> context, String action) {
-        String team = StringArgumentType.getString(context, "team");
+        String player = StringArgumentType.getString(context, "player");
         String rawKind = StringArgumentType.getString(context, "kind");
         double amount = DoubleArgumentType.getDouble(context, "amount");
         Optional<ResourceKind> parsedKind = ResourceKind.parse(rawKind);
@@ -429,34 +435,47 @@ public final class WarProjectCommands {
         }
         ResourceKind kind = parsedKind.get();
         MinecraftServer server = server(context);
-        if (!ResourceApi.teamExists(server, team)) {
-            return fail(context, "Team not found: " + team);
+        if (!"transfer".equals(action) && !ResourceApi.playerKnown(server, player)) {
+            return fail(context, "Player not tracked: " + player);
         }
         switch (action) {
             case "set" -> {
-                if (!ResourceApi.set(server, team, kind, amount)) {
-                    return fail(context, "Unable to set " + kind.id() + " for team: " + team);
+                if (!ResourceApi.set(server, player, kind, amount)) {
+                    return fail(context, "Unable to set " + kind.id() + " for player: " + player);
                 }
-                success(context, "Team " + team + " " + kind.id() + " set to "
-                        + formatAmount(ResourceApi.amount(server, team, kind)));
+                success(context, "Player " + player + " " + kind.id() + " set to "
+                        + formatAmount(ResourceApi.amount(server, player, kind)));
             }
             case "add" -> {
-                if (!ResourceApi.add(server, team, kind, amount)) {
-                    return fail(context, "Unable to add " + kind.id() + " for team: " + team);
+                if (!ResourceApi.add(server, player, kind, amount)) {
+                    return fail(context, "Unable to add " + kind.id() + " for player: " + player);
                 }
-                success(context, "Team " + team + " " + kind.id() + ": "
-                        + formatAmount(ResourceApi.amount(server, team, kind)));
+                success(context, "Player " + player + " " + kind.id() + ": "
+                        + formatAmount(ResourceApi.amount(server, player, kind)));
             }
             case "take" -> {
                 if (!GameStateService.active().isRunning()) {
                     return fail(context, "Resource consumption is paused while the game is "
                             + GameStateService.active().phase().id() + ".");
                 }
-                if (!ResourceApi.spend(server, team, kind, amount)) {
-                    return fail(context, "Not enough " + kind.id() + " for team: " + team);
+                if (!ResourceApi.spend(server, player, kind, amount)) {
+                    return fail(context, "Not enough " + kind.id() + " for player: " + player);
                 }
-                success(context, "Team " + team + " " + kind.id() + ": "
-                        + formatAmount(ResourceApi.amount(server, team, kind)));
+                success(context, "Player " + player + " " + kind.id() + ": "
+                        + formatAmount(ResourceApi.amount(server, player, kind)));
+            }
+            case "transfer" -> {
+                ServerPlayer sender;
+                try {
+                    sender = context.getSource().getPlayerOrException();
+                } catch (Exception exception) {
+                    return fail(context, "This command must be executed by a player.");
+                }
+                ResourceApi.TransferOutcome outcome = ResourceApi.transfer(server, sender, player, kind, amount);
+                if (!outcome.ok()) {
+                    return fail(context, outcome.message());
+                }
+                success(context, outcome.message());
             }
             default -> {
                 return fail(context, "Unknown resource action: " + action);

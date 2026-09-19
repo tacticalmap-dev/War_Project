@@ -6,6 +6,7 @@ import com.flowingsun.war_project.module.GameStateService;
 import com.flowingsun.war_project.team.TeamData;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.slf4j.Logger;
@@ -14,8 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Settles node resource output (ammo and fuel) into team stockpiles. Only ticks while the game
- * phase is RUNNING; a paused game neither gains nor accumulates catch-up time.
+ * Settles node resource output into personal stockpiles. A node pays its owning team's output to
+ * every online member in full (online N members -> N times the output). Only ticks while the game
+ * phase is RUNNING, and offline members never accumulate.
  */
 public final class ResourceService {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -54,18 +56,48 @@ public final class ResourceService {
         double elapsedSeconds = pendingTicks / 20.0D;
         pendingTicks = 0;
         settle(event.getServer(), elapsedSeconds);
-        ResourceApi.broadcastSync(event.getServer());
+        ResourceApi.pushSyncAll(event.getServer());
     }
 
     /**
-     * Credits both resources of every node that belongs to an existing team. Returns the per-team
-     * gains actually applied.
+     * Credits every online member of a node-owning team with the full team gain for this pass.
+     * Returns the per-player gains actually applied.
      */
     public Map<String, ResourceData.Stock> settle(MinecraftServer server, double elapsedSeconds) {
-        Map<String, ResourceData.Stock> gains = new LinkedHashMap<>();
+        Map<String, ResourceData.Stock> playerGains = new LinkedHashMap<>();
         if (server == null || elapsedSeconds <= 0.0D) {
-            return gains;
+            return playerGains;
         }
+        Map<String, ResourceData.Stock> teamGains = teamGains(server, elapsedSeconds);
+        if (teamGains.isEmpty()) {
+            return playerGains;
+        }
+        TeamData teams = TeamData.get(server);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            String name = player.getScoreboardName();
+            String teamId = teams.teamOf(name).orElse(null);
+            if (teamId == null) {
+                continue;
+            }
+            ResourceData.Stock gain = teamGains.get(teamId);
+            if (gain == null) {
+                continue;
+            }
+            ResourceData.Stock current = playerGains.getOrDefault(name, ResourceData.Stock.empty());
+            playerGains.put(name, new ResourceData.Stock(current.ammo() + gain.ammo(), current.fuel() + gain.fuel()));
+        }
+        if (!playerGains.isEmpty()) {
+            ResourceData.get(server).addStocksForPlayers(playerGains);
+        }
+        if (Config.resourceDebugMode && !playerGains.isEmpty()) {
+            LOGGER.info("War Project resource settlement ({}s): {}", elapsedSeconds, playerGains);
+        }
+        return playerGains;
+    }
+
+    /** The raw per-team output of this pass, before it is copied to each online member. */
+    private Map<String, ResourceData.Stock> teamGains(MinecraftServer server, double elapsedSeconds) {
+        Map<String, ResourceData.Stock> gains = new LinkedHashMap<>();
         TeamData teams = TeamData.get(server);
         for (MapData.Node node : MapData.get(server).nodes()) {
             if (!MapData.isFaction(node.factionId())) {
@@ -84,12 +116,6 @@ public final class ResourceService {
             gains.put(owner, new ResourceData.Stock(
                     current.ammo() + Math.max(0.0D, ammoPerMinute * elapsedSeconds / 60.0D),
                     current.fuel() + Math.max(0.0D, fuelPerMinute * elapsedSeconds / 60.0D)));
-        }
-        if (!gains.isEmpty()) {
-            ResourceData.get(server).addStocks(gains);
-        }
-        if (Config.resourceDebugMode && !gains.isEmpty()) {
-            LOGGER.info("War Project resource settlement ({}s): {}", elapsedSeconds, gains);
         }
         return gains;
     }

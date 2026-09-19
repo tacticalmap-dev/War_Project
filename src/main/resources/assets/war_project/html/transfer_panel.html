@@ -1,0 +1,47 @@
+<div id="panel" class="panel">
+<div id="title" class="title">Transfer</div>
+<div class="roster">
+<div id="row0" class="row"><span id="row0-name" class="pname"></span><span id="row0-ammo" class="pval"></span><span id="row0-fuel" class="pval"></span></div>
+<div id="row1" class="row"><span id="row1-name" class="pname"></span><span id="row1-ammo" class="pval"></span><span id="row1-fuel" class="pval"></span></div>
+<div id="row2" class="row"><span id="row2-name" class="pname"></span><span id="row2-ammo" class="pval"></span><span id="row2-fuel" class="pval"></span></div>
+<div id="row3" class="row"><span id="row3-name" class="pname"></span><span id="row3-ammo" class="pval"></span><span id="row3-fuel" class="pval"></span></div>
+<div id="row4" class="row"><span id="row4-name" class="pname"></span><span id="row4-ammo" class="pval"></span><span id="row4-fuel" class="pval"></span></div>
+<div id="row5" class="row"><span id="row5-name" class="pname"></span><span id="row5-ammo" class="pval"></span><span id="row5-fuel" class="pval"></span></div>
+<div id="row6" class="row"><span id="row6-name" class="pname"></span><span id="row6-ammo" class="pval"></span><span id="row6-fuel" class="pval"></span></div>
+<div id="row7" class="row"><span id="row7-name" class="pname"></span><span id="row7-ammo" class="pval"></span><span id="row7-fuel" class="pval"></span></div>
+</div>
+<div class="entry">
+<span class="label">Amount</span>
+<div id="inputbox" class="inputbox"></div>
+</div>
+<div class="actions">
+<div id="btn-confirm" class="button primary">Confirm</div>
+<div id="btn-cancel" class="button">Cancel</div>
+</div>
+<div id="result" class="result"></div>
+</div>
+<style>
+.panel { display:flex; flex-direction:column; gap:6px; width:224px; background-color:#12161df2; border-radius:10px; padding:10px; box-shadow:3px 3px 6px #00000080; opacity:0; transform:scale(0.94); transition:160ms ease-out; }
+.panel.open { opacity:1; transform:scale(1); }
+.title { color:#ffffff; }
+.roster { display:flex; flex-direction:column; gap:2px; }
+.row { display:flex; flex-direction:row; align-items:center; gap:6px; padding:3px 6px; border-radius:6px; }
+.row.hidden { display:none; }
+.row.offline { opacity:0.45; }
+.row:hover { background-color:#2a3444; }
+.row.selected { background-color:#1f3a5f; }
+.pname { color:#ffffff; }
+.pval { color:#9ecbff; }
+.entry { display:flex; flex-direction:row; align-items:center; gap:6px; }
+.label { color:#9aa4af; }
+.inputbox { width:70px; height:14px; background-color:#080b10ff; border-radius:4px; }
+.actions { display:flex; flex-direction:row; align-items:center; gap:6px; }
+.button { color:#ffffff; background-color:#232a34; border-radius:6px; padding:3px 10px; }
+.button:hover { background-color:#2f3a48; }
+.button.disabled { opacity:0.55; }
+.button.primary { background-color:#1f6feb; }
+.button.primary:hover { background-color:#2b7ffb; }
+.result { color:#9aa4af; }
+.result.ok { color:#7ce38b; }
+.result.fail { color:#ff8f8f; }
+</style>

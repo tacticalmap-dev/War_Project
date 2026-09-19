@@ -40,6 +40,6 @@ public final class ResourceModule implements WarProjectModule {
             LOGGER.info("War Project game ended: cleared resources for {} team(s)", cleared);
         }
         // Every phase change refreshes the client HUD (it is only visible while RUNNING).
-        ResourceApi.broadcastSync(server);
+        ResourceApi.pushSyncAll(server);
     }
 }

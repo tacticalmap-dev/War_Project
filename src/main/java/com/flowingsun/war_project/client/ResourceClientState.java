@@ -2,28 +2,31 @@ package com.flowingsun.war_project.client;
 
 import com.flowingsun.war_project.net.WarProjectNetwork;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-
 /**
- * Client mirror of the server resource snapshot. Purely a display cache for the HUD; it never
- * decides gameplay.
+ * Client mirror of the server's personal resource snapshot. Purely a display cache for the HUD and
+ * the transfer panel; it never decides gameplay.
  */
 public final class ResourceClientState {
-    private static final Map<String, WarProjectNetwork.ResourceTeamEntry> teams = new LinkedHashMap<>();
     private static boolean running;
+    private static boolean hasTeam;
+    private static java.util.List<WarProjectNetwork.TeamMemberEntry> teammates = java.util.List.of();
+    private static double ammo;
+    private static double fuel;
+    private static double ammoPerMinute;
+    private static double fuelPerMinute;
     private static int version;
 
     private ResourceClientState() {
     }
 
     public static void replace(WarProjectNetwork.ResourceSyncPacket packet) {
-        teams.clear();
-        for (WarProjectNetwork.ResourceTeamEntry entry : packet.teams()) {
-            teams.put(entry.teamId(), entry);
-        }
         running = packet.running();
+        hasTeam = packet.hasTeam();
+        ammo = packet.ammo();
+        fuel = packet.fuel();
+        ammoPerMinute = packet.ammoPerMinute();
+        fuelPerMinute = packet.fuelPerMinute();
+        teammates = packet.teammates();
         version++;
     }
 
@@ -31,8 +34,37 @@ public final class ResourceClientState {
         return running;
     }
 
-    public static Optional<WarProjectNetwork.ResourceTeamEntry> entry(String teamId) {
-        return teamId == null ? Optional.empty() : Optional.ofNullable(teams.get(teamId));
+    public static boolean hasTeam() {
+        return hasTeam;
+    }
+
+    public static double ammo() {
+        return ammo;
+    }
+
+    public static double fuel() {
+        return fuel;
+    }
+
+    public static double amount(com.flowingsun.war_project.resource.ResourceKind kind) {
+        return kind == com.flowingsun.war_project.resource.ResourceKind.FUEL ? fuel : ammo;
+    }
+
+    public static double rate(com.flowingsun.war_project.resource.ResourceKind kind) {
+        return kind == com.flowingsun.war_project.resource.ResourceKind.FUEL ? fuelPerMinute : ammoPerMinute;
+    }
+
+    public static double ammoPerMinute() {
+        return ammoPerMinute;
+    }
+
+    public static double fuelPerMinute() {
+        return fuelPerMinute;
+    }
+
+    /** Stockpiles of the other members of the local player's team (offline members included). */
+    public static java.util.List<WarProjectNetwork.TeamMemberEntry> teammates() {
+        return teammates;
     }
 
     public static int version() {
@@ -40,8 +72,13 @@ public final class ResourceClientState {
     }
 
     public static void reset() {
-        teams.clear();
         running = false;
+        hasTeam = false;
+        teammates = java.util.List.of();
+        ammo = 0.0D;
+        fuel = 0.0D;
+        ammoPerMinute = 0.0D;
+        fuelPerMinute = 0.0D;
         version++;
     }
 }
