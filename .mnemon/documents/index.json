@@ -714,7 +714,7 @@
       ],
       "createdAt": "2026-09-19T21:19:59.329Z",
       "updatedAt": "2026-09-19T21:19:59.329Z",
-      "lastAccessedAt": "2026-09-23T11:46:52.696Z",
+      "lastAccessedAt": "2026-09-23T12:09:57.118Z",
       "revision": 1,
       "contentHash": "13444bfb91601e9bcb90fbcc7d98e561d1a91bc493c68cbe079b5c2fedb657ac",
       "sizeBytes": 6131,
@@ -743,7 +743,7 @@
       ],
       "createdAt": "2026-09-19T21:46:37.932Z",
       "updatedAt": "2026-09-19T21:46:37.932Z",
-      "lastAccessedAt": "2026-09-23T11:46:52.696Z",
+      "lastAccessedAt": "2026-09-23T12:09:57.118Z",
       "revision": 1,
       "contentHash": "0ce0cd6a73690b6c05010a8fc3fcf8b41c20561130cae5df4412d1600730ece8",
       "sizeBytes": 9182,
@@ -824,7 +824,7 @@
       ],
       "createdAt": "2026-09-20T09:41:17.954Z",
       "updatedAt": "2026-09-20T09:41:17.954Z",
-      "lastAccessedAt": "2026-09-23T04:37:59.039Z",
+      "lastAccessedAt": "2026-09-23T12:09:57.118Z",
       "revision": 1,
       "contentHash": "9bacf9a38ee7a969452a65f6674e2c9a19b51c3a25d33c3a9952db5b3c1354f5",
       "sizeBytes": 14138,
@@ -1125,10 +1125,38 @@
       ],
       "createdAt": "2026-09-23T11:47:13.261Z",
       "updatedAt": "2026-09-23T11:47:13.261Z",
-      "lastAccessedAt": "2026-09-23T11:47:13.261Z",
+      "lastAccessedAt": "2026-09-23T12:09:57.118Z",
       "revision": 1,
       "contentHash": "6f3ce5fa913a49e6df153f1695825c78098792911899a33ebde4808894f4c2c4",
       "sizeBytes": 9875,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "d61acde9-7a8e-4aff-b9de-57437ee968f5",
+      "title": "War Project 客户端 jar 热替换事故与安全部署／离线验证运行手册",
+      "description": "2026-09-23 事故复盘：游戏运行中用 cp -f 原地覆盖 mods 里的 jar，JVM 的 zip 视图与磁盘不一致，首次加载未加载过的类即 NoClassDefFoundError 崩游戏（打开 Xaero 世界地图时炸在 XaeroWorldMapScreenOverlay$MapProjection）。本文给出安全部署流程（先查 javaw/java 进程；必要时 mv 成 .prev 再放入新文件）、同因的 Error 兜底加固，以及无游戏环境下的离线界面验证流程（DOM 桩自检、WMI 起脱离 shell 的静态服务器 + 自驱动探针页 + browser_open 读文本/截图），并记录本轮用户口径。做构建/部署/离线 UI 验证前读。",
+      "status": "active",
+      "filename": "war-project-jar-d61acde9.md",
+      "relativePath": "documents/active/war-project-jar-d61acde9.md",
+      "sourcePaths": [
+        "docs/CHROMIUM_BACKEND.md",
+        "docs/ARCHITECTURE.md",
+        "src/optionalXaero/java/com/flowingsun/war_project/compat/xaero/XaeroWorldMapScreenOverlay.java",
+        "src/main/java/com/flowingsun/war_project/client/ResourceTransferController.java",
+        "src/main/java/com/flowingsun/war_project/client/cef/CefOsrView.java",
+        "src/main/resources/assets/war_project/web/overlay.html",
+        "scripts/verify-overlay-page.mjs",
+        "scripts/verify-cef-paint-regions.sh"
+      ],
+      "sessionIds": [
+        "e39b0782-5eb0-41fc-93ad-1b6b4eb3e527"
+      ],
+      "createdAt": "2026-09-23T12:10:24.203Z",
+      "updatedAt": "2026-09-23T12:10:24.203Z",
+      "lastAccessedAt": "2026-09-23T12:10:24.203Z",
+      "revision": 1,
+      "contentHash": "6f3076d34d858c6094533053250992a9c7ff549ba32565351ad15308466cc656",
+      "sizeBytes": 9658,
       "memoryBodyIds": []
     }
   ]

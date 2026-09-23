@@ -58,11 +58,11 @@
       "importance": "critical"
     },
     {
-      "content": "War_Project 常有多 agent 并行改动同一仓库：默认在自行执行 gradle 构建（./gradlew build）或把 jar 覆盖同步到 D:\\mc\\.minecraft\\versions\\totalwar\\mods先检查是否有其他agent在工作，以免与其他 agent 的构建/部署冲突，若没有时照常构建并同步。本机 Gradle **daemon 模式会卡死**（daemon 日志停在 “The daemon has started executing the build” 后毫无输出，5-10 分钟无进展、CPU 停滞，杀进程重试仍复现）；改用 `.\\gradlew.bat build --no-daemon --offline` 并在后台作业里用 `*>` 重定向到日志文件，约 40 秒即可 BUILD SUCCESSFUL。",
+      "content": "War_Project 常有多 agent 并行改同一仓库：构建/同步 jar 前先查有没有其他 agent 与 **javaw/java 进程**；**游戏运行中绝不原地覆盖 `mods\\war_project-1.0.0.jar`** —— `cp -f` 会重写 JVM 正打开的 zip，首次加载尚未加载过的类（如只在打开 Xaero 地图时才加载的内部 record）即 `NoClassDefFoundError` 崩游戏（2026-09-23 事故，详见文档 d61acde9）；必须替换时先 `mv` 成 `.prev` 再放入新文件。本机 Gradle daemon 模式会卡死，改用 `.\\gradlew.bat build --no-daemon --offline`，约 40 秒。",
       "created_at": "2026-09-19T05:06:29.391Z",
-      "updated_at": "2026-09-19T05:37:22.522Z",
+      "updated_at": "2026-09-23T12:10:27.478Z",
       "target": "memory",
-      "importance": "normal"
+      "importance": "critical"
     },
     {
       "content": "War Project 顶部 HUD（2026-09-21 定稿）：单文档 `html/top_hud.html`，由 `client/ResourceIslandView` 驱动；显隐＝`running && hasTeam && 非 SBW 炮镜`。条＝纯矩形主体（宽=屏宽×0.68，clamp 240–420、量化 4px，padding 0 12px，`#000000f0`）＋两端固定 14×22 圆角端盖 SVG（宽元素圆角不可靠，端盖才稳）；胶囊＝高 18、圆角 9、padding 0 12（12px PNG 图标 + 存量 + `+xx`）；交界＝两个 9×9 凹角补丁，path 须为四分之一圆盘（`M 0 0 C 0 5 4 9 9 9 L 9 0 Z`，与条/胶囊各整边相连），不是弦月牙（否则露尖角）；星每 vp node 一颗，`viewBox=\"-4 -4 32 32\"`、占领环半径 13.5/11.5（环比星明显大一圈）；`.score{min-width:24px}` 使左右对称。CEF 只画转移面板（表面下移 y=43）。内核只认单 class/单 id/元素选择器（陷阱详文档 `f4af89b7`）。",

@@ -5,7 +5,7 @@
 <style>
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   body { font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; color: #fff;
-    -webkit-font-smoothing: antialiased; font-size: 6px; }
+    -webkit-font-smoothing: antialiased; font-size: 5px; }
   .stack { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center; }
   /* One black slab: collapsed it is the island bar, expanded it grows downwards into the roster. */
   /* Collapsed the slab hugs its content (the width is measured in script so it can still animate);
@@ -36,35 +36,35 @@
   /* Pinned to the slab's own top edge: collapsed it is clipped to nothing, and while the slab grows
      the content unrolls out of the island's footprint instead of sliding down from behind the bar. */
   .body { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column;
-    gap: 2px; padding: 2px 5px 4px 5px; box-sizing: border-box; opacity: 0; transition: opacity .14s ease; }
+    gap: 2px; padding: 2px 4px 3px 4px; box-sizing: border-box; opacity: 0; transition: opacity .14s ease; }
   /* Later than the growth: the contents must not appear inside the still tiny panel. */
   .slab.open .body { opacity: 1; transition: opacity .18s ease .14s; }
-  .head { display: flex; align-items: center; justify-content: space-between; font-size: 7px; font-weight: 600; }
-  .sub { font-size: 6px; color: #9fb0c6; font-weight: 400; }
+  .head { display: flex; align-items: center; justify-content: space-between; font-size: 6px; font-weight: 600; }
+  .sub { font-size: 5px; color: #9fb0c6; font-weight: 400; }
   .roster { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
-  .roster::-webkit-scrollbar { width: 4px; }
+  .roster::-webkit-scrollbar { width: 3px; }
   .roster::-webkit-scrollbar-thumb { background: #ffffff2e; border-radius: 2px; }
-  .row { display: flex; align-items: center; gap: 4px; padding: 1px 4px; border-radius: 4px;
+  .row { display: flex; align-items: center; gap: 3px; padding: 1px 3px; border-radius: 3px;
     cursor: pointer; transition: background .12s ease; }
   .row:hover { background: #ffffff1a; }
   .row.sel { background: #ffffff26; box-shadow: inset 0 0 0 1px #ffffff59; }
   .row.off { opacity: .4; cursor: default; }
   .name { flex: 1; }
-  .val { color: #b9c6d6; font-size: 6px; font-variant-numeric: tabular-nums; }
-  .entry { display: flex; align-items: center; gap: 4px; }
-  .label { color: #9fb0c6; font-size: 6px; }
+  .val { color: #b9c6d6; font-size: 5px; font-variant-numeric: tabular-nums; }
+  .entry { display: flex; align-items: center; gap: 3px; }
+  .label { color: #9fb0c6; font-size: 5px; }
   input { flex: 1; min-width: 0; box-sizing: border-box; background: #ffffff12; border: 1px solid #ffffff26;
-    border-radius: 4px; color: #fff; padding: 1px 4px; font-size: 6px; outline: none; font-family: inherit;
+    border-radius: 3px; color: #fff; padding: 1px 3px; font-size: 5px; outline: none; font-family: inherit;
     font-variant-numeric: tabular-nums; }
   input:focus { border-color: #ffffff59; }
-  .actions { display: flex; gap: 4px; }
-  button { flex: 1; border: 1px solid #ffffff1f; border-radius: 5px; padding: 3px 5px; font-size: 6px;
+  .actions { display: flex; gap: 3px; }
+  button { flex: 1; border: 1px solid #ffffff1f; border-radius: 4px; padding: 2px 4px; font-size: 5px;
     color: #fff; background: #ffffff12; cursor: pointer; font-family: inherit; transition: background .12s ease; }
   button:hover { background: #ffffff26; }
   button.primary { background: #2b7ffb; border-color: #2b7ffb; }
   button.primary:hover { background: #3f8dfd; }
   button:disabled { opacity: .45; cursor: default; background: #ffffff0d; border-color: #ffffff14; }
-  .result { min-height: 8px; font-size: 6px; color: #9fb0c6; }
+  .result { min-height: 7px; font-size: 5px; color: #9fb0c6; }
   .result.ok { color: #7ce38b; }
   .result.fail { color: #ff9a9a; }
 </style>
