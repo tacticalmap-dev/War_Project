@@ -121,7 +121,7 @@ public final class MapData extends SavedData {
         return SaveResult.success();
     }
 
-    public SaveResult saveNodeWithWarzone(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb) {
+    public SaveResult saveNodeWithWarzone(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb, boolean vp) {
         String cleanNodeId = cleanId(nodeId);
         if (!validId(cleanNodeId)) {
             return SaveResult.invalid("Invalid node id.");
@@ -153,7 +153,8 @@ public final class MapData extends SavedData {
         }
 
         String name = nodeName == null || nodeName.isBlank() ? cleanNodeId : nodeName.trim();
-        Node node = new Node(cleanNodeId, name, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), 0.0D, 0.0D, Set.copyOf(nodeChunks));
+        // A fresh node starts with no output; a VP node never gains any, so the flag is the only difference.
+        Node node = new Node(cleanNodeId, name, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), 0.0D, 0.0D, Set.copyOf(nodeChunks), vp);
         Warzone warzone = new Warzone(cleanNodeId, cleanNodeId, "neutral", normalizeRgb(colorRgb), System.currentTimeMillis(), Set.copyOf(cleanWarzoneChunks));
         nodes.put(cleanNodeId, node);
         warzones.put(warzone.id(), warzone);
@@ -215,6 +216,7 @@ public final class MapData extends SavedData {
     public boolean setNodeResourceOutputs(String nodeId, double ammoPerMinute, double fuelPerMinute) {
         Node node = nodes.get(cleanId(nodeId));
         if (node == null
+                || node.vp()
                 || !Double.isFinite(ammoPerMinute) || ammoPerMinute < 0.0D
                 || !Double.isFinite(fuelPerMinute) || fuelPerMinute < 0.0D) {
             return false;
@@ -222,6 +224,30 @@ public final class MapData extends SavedData {
         nodes.put(node.id(), node.withResourceOutputs(ammoPerMinute, fuelPerMinute));
         setDirty();
         return true;
+    }
+
+    /**
+     * Flags or clears the VP marker. A VP node never produces anything, so turning the marker on zeroes
+     * its output too; turning it off leaves the output at zero until it is set again on purpose. Returns
+     * false when the node is missing or nothing actually changed.
+     */
+    public boolean setNodeVp(String nodeId, boolean vp) {
+        Node node = nodes.get(cleanId(nodeId));
+        if (node == null) {
+            return false;
+        }
+        if (node.vp() == vp && (!vp || (node.ammoPerMinute() <= 0.0D && node.fuelPerMinute() <= 0.0D))) {
+            return false;
+        }
+        nodes.put(node.id(), new Node(node.id(), node.name(), node.factionId(), node.colorRgb(), System.currentTimeMillis(),
+                vp ? 0.0D : node.ammoPerMinute(), vp ? 0.0D : node.fuelPerMinute(), node.chunks(), vp));
+        setDirty();
+        return true;
+    }
+
+    public boolean isVpNode(String nodeId) {
+        Node node = nodes.get(cleanId(nodeId));
+        return node != null && node.vp();
     }
 
     /**
@@ -362,8 +388,12 @@ public final class MapData extends SavedData {
         return tags;
     }
 
+    /**
+     * {@code vp} marks a "victory point" objective: it follows the normal capture rules but never produces
+     * resources, and the maps draw a star under its name whose colour follows its current owner.
+     */
     public record Node(String id, String name, String factionId, int colorRgb, long updatedAt,
-                       double ammoPerMinute, double fuelPerMinute, Set<Long> chunks) {
+                       double ammoPerMinute, double fuelPerMinute, Set<Long> chunks, boolean vp) {
         static Node load(CompoundTag tag) {
             String id = cleanId(tag.getString("id"));
             String name = tag.getString("name").isBlank() ? id : tag.getString("name");
@@ -372,7 +402,8 @@ public final class MapData extends SavedData {
                     ? tag.getDouble("ammo_per_minute")
                     : tag.getDouble("resource_per_minute"));
             return new Node(id, name, normalizeFaction(tag.getString("faction_id")), tag.getInt("color_rgb"),
-                    tag.getLong("updated_at"), ammo, normalizeResource(tag.getDouble("fuel_per_minute")), Set.copyOf(readChunks(tag)));
+                    tag.getLong("updated_at"), ammo, normalizeResource(tag.getDouble("fuel_per_minute")), Set.copyOf(readChunks(tag)),
+                    tag.getBoolean("vp"));
         }
 
         CompoundTag save() {
@@ -384,21 +415,26 @@ public final class MapData extends SavedData {
             tag.putLong("updated_at", updatedAt);
             tag.putDouble("ammo_per_minute", ammoPerMinute);
             tag.putDouble("fuel_per_minute", fuelPerMinute);
+            tag.putBoolean("vp", vp);
             tag.put("chunks", writeChunks(chunks));
             return tag;
         }
 
         Node withIdentity(String newId, String newName) {
-            return new Node(newId, newName, factionId, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks);
+            return new Node(newId, newName, factionId, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks, vp);
         }
 
         Node withFaction(String faction) {
-            return new Node(id, name, faction, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks);
+            return new Node(id, name, faction, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks, vp);
         }
 
         Node withResourceOutputs(double ammo, double fuel) {
             return new Node(id, name, factionId, colorRgb, System.currentTimeMillis(),
-                    normalizeResource(ammo), normalizeResource(fuel), chunks);
+                    normalizeResource(ammo), normalizeResource(fuel), chunks, vp);
+        }
+
+        Node withVp(boolean newVp) {
+            return new Node(id, name, factionId, colorRgb, System.currentTimeMillis(), ammoPerMinute, fuelPerMinute, chunks, newVp);
         }
     }
 

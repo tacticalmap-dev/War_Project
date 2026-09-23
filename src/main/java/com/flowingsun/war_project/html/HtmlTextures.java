@@ -28,7 +28,7 @@ public final class HtmlTextures {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Map<String, ResourceLocation> CACHE = new LinkedHashMap<>(64, 0.75F, true);
     private static final int MAX_ENTRIES = 512;
-    private static final int MAX_SIDE = 1024;
+    private static final int MAX_SIDE = 4096;
 
     private static boolean unavailable;
     private static int sequence;
@@ -91,12 +91,15 @@ public final class HtmlTextures {
         if (strength <= 0.0F || (color >>> 24) == 0) {
             return;
         }
-        String key = "s|" + width + "x" + height + "|" + radius;
+        int ras = rasterScale(width, height);
+        int texWidth = width * ras;
+        int texHeight = height * ras;
+        String key = "s|" + texWidth + "x" + texHeight + "|" + radius + "|" + ras;
         ResourceLocation texture = CACHE.get(key);
         if (texture == null) {
-            texture = texture(key, width, height, coverage(width, height, radius));
+            texture = texture(key, texWidth, texHeight, coverage(texWidth, texHeight, radius * ras), ras > 1);
         }
-        blit(graphics, texture, x, y, width, height, scale(color, strength));
+        blit(graphics, texture, x, y, width, height, scale(color, strength), texWidth, texHeight);
     }
 
     /** One pixel inner rim, brighter along the top edge, which is what reads as depth on a dark pill. */
@@ -106,24 +109,29 @@ public final class HtmlTextures {
         }
         int t = Math.max(1, Math.min(thickness, Math.min(width, height) / 2));
         double innerRadius = Math.max(0.0D, radius - t);
-        String key = "r|" + width + "x" + height + "|" + radius + "|" + t;
+        int ras = rasterScale(width, height);
+        int texWidth = width * ras;
+        int texHeight = height * ras;
+        int texInset = t * ras;
+        String key = "r|" + texWidth + "x" + texHeight + "|" + radius + "|" + t + "|" + ras;
         ResourceLocation cached = CACHE.get(key);
         if (cached != null) {
-            blit(graphics, cached, x, y, width, height, color);
+            blit(graphics, cached, x, y, width, height, color, texWidth, texHeight);
             return;
         }
         // The lip ramp is baked into the alpha: 1.0 at the top edge sliding to 0.35 at the bottom.
-        float[] values = new float[width * height];
-        for (int py = 0; py < height; py++) {
-            double lip = 0.35D + 0.65D * (1.0D - (height <= 1 ? 0.0D : py / (double) (height - 1)));
-            for (int px = 0; px < width; px++) {
-                double outer = coverageAt(px, py, width, height, radius);
-                double inner = coverageAt(px - t, py - t, width - 2 * t, height - 2 * t, innerRadius);
+        float[] values = new float[texWidth * texHeight];
+        for (int py = 0; py < texHeight; py++) {
+            double lip = 0.35D + 0.65D * (1.0D - (texHeight <= 1 ? 0.0D : py / (double) (texHeight - 1)));
+            for (int px = 0; px < texWidth; px++) {
+                double outer = coverageAt(px, py, texWidth, texHeight, radius * ras);
+                double inner = coverageAt(px - texInset, py - texInset, texWidth - 2 * texInset, texHeight - 2 * texInset,
+                        innerRadius * ras);
                 double band = Math.max(0.0D, outer - inner);
-                values[py * width + px] = (float) Math.min(1.0D, band * lip);
+                values[py * texWidth + px] = (float) Math.min(1.0D, band * lip);
             }
         }
-        blit(graphics, texture(key, width, height, values), x, y, width, height, color);
+        blit(graphics, texture(key, texWidth, texHeight, values, ras > 1), x, y, width, height, color, texWidth, texHeight);
     }
 
     /** Vertical two stop gloss, clipped to the silhouette. */
@@ -134,24 +142,27 @@ public final class HtmlTextures {
         }
         int topAlpha = color >>> 24;
         int bottomAlpha = Css.scaleAlpha(css.gradientBottom, opacity) >>> 24;
-        String key = "g|" + width + "x" + height + "|" + radius + "|" + topAlpha + "|" + bottomAlpha;
+        int ras = rasterScale(width, height);
+        int texWidth = width * ras;
+        int texHeight = height * ras;
+        String key = "g|" + texWidth + "x" + texHeight + "|" + radius + "|" + topAlpha + "|" + bottomAlpha + "|" + ras;
         ResourceLocation cached = CACHE.get(key);
         if (cached != null) {
-            blit(graphics, cached, x, y, width, height, color);
+            blit(graphics, cached, x, y, width, height, color, texWidth, texHeight);
             return;
         }
         // The texture carries the ramp shape only (1.0 at the top), the tint colour carries the
         // magnitude, so the alpha is applied exactly once.
         double bottomRatio = topAlpha <= 0 ? 0.0D : bottomAlpha / (double) topAlpha;
-        float[] values = new float[width * height];
-        for (int py = 0; py < height; py++) {
-            double t = height <= 1 ? 0.0D : py / (double) (height - 1);
+        float[] values = new float[texWidth * texHeight];
+        for (int py = 0; py < texHeight; py++) {
+            double t = texHeight <= 1 ? 0.0D : py / (double) (texHeight - 1);
             double ramp = 1.0D + (bottomRatio - 1.0D) * t;
-            for (int px = 0; px < width; px++) {
-                values[py * width + px] = (float) (coverageAt(px, py, width, height, radius) * ramp);
+            for (int px = 0; px < texWidth; px++) {
+                values[py * texWidth + px] = (float) (coverageAt(px, py, texWidth, texHeight, radius * ras) * ramp);
             }
         }
-        blit(graphics, texture(key, width, height, values), x, y, width, height, color);
+        blit(graphics, texture(key, texWidth, texHeight, values, ras > 1), x, y, width, height, color, texWidth, texHeight);
     }
 
     /** Soft drop shadow: the distance field is blurred over {@code blur} pixels around the outline. */
@@ -162,26 +173,32 @@ public final class HtmlTextures {
             return;
         }
         int pad = (int) Math.ceil(shadow.blur * 0.5D) + 1 + Math.max(Math.abs(shadow.offsetX), Math.abs(shadow.offsetY));
-        int tw = width + pad * 2;
-        int th = height + pad * 2;
-        String key = "o|" + width + "x" + height + "|" + radius + "|" + pad + "|"
-                + shadow.offsetX + "|" + shadow.offsetY + "|" + shadow.blur;
+        int drawWidth = width + pad * 2;
+        int drawHeight = height + pad * 2;
+        int ras = rasterScale(drawWidth, drawHeight);
+        int texWidth = drawWidth * ras;
+        int texHeight = drawHeight * ras;
+        String key = "o|" + texWidth + "x" + texHeight + "|" + radius + "|" + pad + "|"
+                + shadow.offsetX + "|" + shadow.offsetY + "|" + shadow.blur + "|" + ras;
+        int drawX = x - pad + shadow.offsetX;
+        int drawY = y - pad + shadow.offsetY;
         ResourceLocation cached = CACHE.get(key);
         if (cached != null) {
-            blit(graphics, cached, x - pad + shadow.offsetX, y - pad + shadow.offsetY, tw, th, color);
+            blit(graphics, cached, drawX, drawY, drawWidth, drawHeight, color, texWidth, texHeight);
             return;
         }
-        double ramp = Math.max(1.0D, shadow.blur * 0.85D);
-        float[] values = new float[tw * th];
-        for (int py = 0; py < th; py++) {
-            for (int px = 0; px < tw; px++) {
-                double sx = px - pad - shadow.offsetX + 0.5D;
-                double sy = py - pad - shadow.offsetY + 0.5D;
-                double distance = signedDistance(sx, sy, width, height, radius);
-                values[py * tw + px] = (float) clamp01(0.5D - distance / ramp);
+        double ramp = Math.max(1.0D, shadow.blur * 0.85D) * ras;
+        float[] values = new float[texWidth * texHeight];
+        for (int py = 0; py < texHeight; py++) {
+            for (int px = 0; px < texWidth; px++) {
+                double sx = px - (pad + shadow.offsetX) * ras + 0.5D;
+                double sy = py - (pad + shadow.offsetY) * ras + 0.5D;
+                double distance = signedDistance(sx, sy, width * ras, height * ras, radius * ras);
+                values[py * texWidth + px] = (float) clamp01(0.5D - distance / ramp);
             }
         }
-        blit(graphics, texture(key, tw, th, values), x - pad + shadow.offsetX, y - pad + shadow.offsetY, tw, th, color);
+        blit(graphics, texture(key, texWidth, texHeight, values, ras > 1), drawX, drawY, drawWidth, drawHeight, color,
+                texWidth, texHeight);
     }
 
     /** Inner shadow: opaque at the edge, fading towards the middle, clipped to the silhouette. */
@@ -191,30 +208,61 @@ public final class HtmlTextures {
         if ((color >>> 24) == 0) {
             return;
         }
-        String key = "i|" + width + "x" + height + "|" + radius + "|"
-                + shadow.offsetX + "|" + shadow.offsetY + "|" + shadow.blur;
+        int ras = rasterScale(width, height);
+        int texWidth = width * ras;
+        int texHeight = height * ras;
+        String key = "i|" + texWidth + "x" + texHeight + "|" + radius + "|"
+                + shadow.offsetX + "|" + shadow.offsetY + "|" + shadow.blur + "|" + ras;
         ResourceLocation cached = CACHE.get(key);
         if (cached != null) {
-            blit(graphics, cached, x, y, width, height, color);
+            blit(graphics, cached, x, y, width, height, color, texWidth, texHeight);
             return;
         }
-        double ramp = Math.max(1.0D, shadow.blur * 1.2D);
-        float[] values = new float[width * height];
-        for (int py = 0; py < height; py++) {
-            for (int px = 0; px < width; px++) {
-                double own = coverageAt(px, py, width, height, radius);
+        double ramp = Math.max(1.0D, shadow.blur * 1.2D) * ras;
+        float[] values = new float[texWidth * texHeight];
+        for (int py = 0; py < texHeight; py++) {
+            for (int px = 0; px < texWidth; px++) {
+                double own = coverageAt(px, py, texWidth, texHeight, radius * ras);
                 if (own <= 0.0D) {
                     continue;
                 }
-                double distance = signedDistance(px - shadow.offsetX + 0.5D, py - shadow.offsetY + 0.5D,
-                        width, height, radius);
-                values[py * width + px] = (float) (own * clamp01(1.0D - (-distance) / ramp));
+                double distance = signedDistance(px - shadow.offsetX * ras + 0.5D, py - shadow.offsetY * ras + 0.5D,
+                        texWidth, texHeight, radius * ras);
+                values[py * texWidth + px] = (float) (own * clamp01(1.0D - (-distance) / ramp));
             }
         }
-        blit(graphics, texture(key, width, height, values), x, y, width, height, color);
+        blit(graphics, texture(key, texWidth, texHeight, values, ras > 1), x, y, width, height, color, texWidth, texHeight);
     }
 
     // ---------------------------------------------------------------- rasterisation helpers
+
+    /**
+     * How many texels one GUI pixel is rasterised at. Minecraft scales the GUI up by the GUI scale, so
+     * a shape generated at one texel per GUI pixel shows visible stair steps once it is on screen;
+     * rendering it denser and letting the GPU filter it back down is what makes the HUD look smooth.
+     */
+    public static int supersample() {
+        try {
+            double scale = Minecraft.getInstance().getWindow().getGuiScale();
+            return Math.max(1, Math.min(4, (int) Math.ceil(scale)));
+        } catch (Throwable ignored) {
+            return 1;
+        }
+    }
+
+    /** Supersampling that still fits inside {@link #MAX_SIDE}. */
+    public static int rasterScale(int width, int height) {
+        int scale = supersample();
+        if (width > 256 || height > 256) {
+            // Large surfaces (the HUD bar spans the window) would otherwise cost millions of samples in
+            // one frame; two texels per GUI pixel is already smooth at that size.
+            scale = Math.min(scale, 2);
+        }
+        while (scale > 1 && (width * scale > MAX_SIDE || height * scale > MAX_SIDE)) {
+            scale--;
+        }
+        return scale;
+    }
 
     private static float[] coverage(int width, int height, double radius) {
         float[] values = new float[width * height];
@@ -257,18 +305,20 @@ public final class HtmlTextures {
 
     // ---------------------------------------------------------------- texture cache
 
-    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int width, int height, int color) {
+    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int width, int height,
+                             int color, int texWidth, int texHeight) {
         if (texture == null || width <= 0 || height <= 0) {
             return;
         }
         graphics.setColor(((color >>> 16) & 0xFF) / 255.0F, ((color >>> 8) & 0xFF) / 255.0F,
                 (color & 0xFF) / 255.0F, ((color >>> 24) & 0xFF) / 255.0F);
-        graphics.blit(texture, x, y, width, height, 0.0F, 0.0F, width, height, width, height);
+        // The sampled region is the whole texture, which may be denser than the drawn rectangle.
+        graphics.blit(texture, x, y, width, height, 0.0F, 0.0F, texWidth, texHeight, texWidth, texHeight);
         graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     /** Looks up (or uploads) a white alpha texture for the given coverage map. */
-    static ResourceLocation texture(String key, int width, int height, float[] values) {
+    static ResourceLocation texture(String key, int width, int height, float[] values, boolean smooth) {
         if (unavailable || width <= 0 || height <= 0 || width > MAX_SIDE || height > MAX_SIDE) {
             return null;
         }
@@ -288,7 +338,9 @@ public final class HtmlTextures {
                 }
             }
             DynamicTexture dynamic = new DynamicTexture(image);
-            dynamic.setFilter(false, false);
+            // Antialiased shapes are rasterised denser than they are drawn, so they need a smooth
+            // filter; a 1:1 texture keeps nearest so hairline details stay crisp.
+            dynamic.setFilter(smooth, smooth);
             ResourceLocation location = new ResourceLocation(WarProject.MODID, "html/tex_" + (sequence++));
             Minecraft.getInstance().getTextureManager().register(location, dynamic);
             CACHE.put(key, location);

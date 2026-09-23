@@ -34,7 +34,8 @@ public final class ClientMapState {
                     tag.getInt("color_rgb"),
                     tag.getDouble("ammo_per_minute"),
                     tag.getDouble("fuel_per_minute"),
-                    readChunks(tag)
+                    readChunks(tag),
+                    tag.getBoolean("vp")
             ));
         }
         ListTag warzoneTags = snapshot.getList("warzones", Tag.TAG_COMPOUND);
@@ -90,7 +91,7 @@ public final class ClientMapState {
     }
 
     public record ClientNode(String id, String name, String factionId, int colorRgb,
-                             double ammoPerMinute, double fuelPerMinute, Set<Long> chunks) {
+                             double ammoPerMinute, double fuelPerMinute, Set<Long> chunks, boolean vp) {
     }
 
     public record ClientWarzone(String id, String nodeId, String factionId, int colorRgb, Set<Long> chunks) {

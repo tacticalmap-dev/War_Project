@@ -100,6 +100,10 @@ public final class ResourceService {
         Map<String, ResourceData.Stock> gains = new LinkedHashMap<>();
         TeamData teams = TeamData.get(server);
         for (MapData.Node node : MapData.get(server).nodes()) {
+            // VP nodes are objectives, not economy: they never produce, whatever their stored output says.
+            if (node.vp()) {
+                continue;
+            }
             if (!MapData.isFaction(node.factionId())) {
                 continue;
             }

@@ -2,8 +2,10 @@ package com.flowingsun.war_project.compat.xaero;
 
 import com.flowingsun.war_project.WarProject;
 import com.flowingsun.war_project.client.ClientMapState;
+import com.flowingsun.war_project.client.VpStarIcon;
 import com.flowingsun.war_project.client.xaero.XaeroWarProjectMapRenderer;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.logging.LogUtils;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -20,6 +22,7 @@ import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
+import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -46,7 +49,10 @@ import java.util.Set;
  */
 @Mod.EventBusSubscriber(modid = WarProject.MODID, value = Dist.CLIENT)
 public final class XaeroWorldMapScreenOverlay {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final String XAERO_WORLD_MAP_SCREEN = "xaero.map.gui.GuiMap";
+    /** Set after a failure: the overlay stays off instead of failing again on every frame. */
+    private static boolean broken;
     private static final int EDGE_PRIORITY_WARZONE = 0;
     private static final int EDGE_PRIORITY_NODE = 1;
     private static final int LABEL_COLOR = 0xFFFFFFFF;
@@ -76,6 +82,8 @@ public final class XaeroWorldMapScreenOverlay {
     private static final double GAIN_MIN_SCALE_FACTOR = 0.7D;
     private static final double GAIN_MAX_SCALE_FACTOR = 2.2D;
     private static final int GAIN_ICON_SIZE_BASE = 14;
+    /** Star under a VP node's name, sized by the same zoom factor as the income icons. */
+    private static final int VP_STAR_SIZE_BASE = 12;
     private static final int GAIN_ICON_TEXT_GAP_BASE = 2;
     private static final int GAIN_ENTRY_GAP_BASE = 6;
     private static final int GAIN_ROW_GAP_BASE = 2;
@@ -110,9 +118,25 @@ public final class XaeroWorldMapScreenOverlay {
 
     @SubscribeEvent
     public static void onScreenRenderPost(ScreenEvent.Render.Post event) {
+        if (broken) {
+            return;
+        }
         if (!XAERO_WORLD_MAP_SCREEN.equals(event.getScreen().getClass().getName())) {
             return;
         }
+        try {
+            render(event);
+        } catch (Throwable throwable) {
+            // A screen render event must never take the game down. Anything from a missing class (for
+            // example a mod jar that was replaced while the game was running, so a class it had not
+            // loaded yet is no longer reachable) to a changed Xaero field is a reason to stop drawing
+            // this overlay for the session, not to crash the client.
+            broken = true;
+            LOGGER.warn("War Project world map overlay disabled after a failure", throwable);
+        }
+    }
+
+    private static void render(ScreenEvent.Render.Post event) {
         int screenWidth = event.getScreen().width;
         int screenHeight = event.getScreen().height;
         Optional<MapProjection> projectionOpt = readProjection(event.getScreen(), screenWidth, screenHeight);
@@ -155,8 +179,11 @@ public final class XaeroWorldMapScreenOverlay {
             if (center == null) {
                 continue;
             }
-            ChunkPos chunk = new ChunkPos((int) Math.floor(center[0]) >> 4, (int) Math.floor(center[1]) >> 4);
-            FloatRect rect = chunkRect(projection, chunk.x, chunk.z, chunk.x + 1, chunk.z + 1);
+            // Project the world-space centre straight through: snapping it to the containing chunk's centre
+            // would move the label up to eight blocks (tens of pixels when zoomed in) off the real middle.
+            FloatRect rect = new FloatRect(
+                    projectX(projection, center[0] - 8.0D), projectY(projection, center[1] - 8.0D),
+                    projectX(projection, center[0] + 8.0D), projectY(projection, center[1] + 8.0D));
             if (!rect.intersects(screenWidth, screenHeight)) {
                 continue;
             }
@@ -178,16 +205,25 @@ public final class XaeroWorldMapScreenOverlay {
         }
         long ammoGain = gainAmount(node.ammoPerMinute());
         long fuelGain = gainAmount(node.fuelPerMinute());
-        boolean showGains = projection.zoom() >= GAIN_MIN_ZOOM && (ammoGain > 0L || fuelGain > 0L);
+        boolean vp = node.vp();
+        boolean showGains = !vp && projection.zoom() >= GAIN_MIN_ZOOM && (ammoGain > 0L || fuelGain > 0L);
         int labelHeight = font.lineHeight;
         int iconSize = gainSize(GAIN_ICON_SIZE_BASE, projection.zoom());
         int iconTextGap = gainSize(GAIN_ICON_TEXT_GAP_BASE, projection.zoom());
         int entryGap = gainSize(GAIN_ENTRY_GAP_BASE, projection.zoom());
         int rowGap = gainSize(GAIN_ROW_GAP_BASE, projection.zoom());
-        int blockHeight = labelHeight + (showGains ? rowGap + Math.max(iconSize, labelHeight) : 0);
+        // A VP node shows the star instead of an income row: it produces nothing, and the star is an
+        // ownership marker that should stay readable at every zoom, so it ignores the 2.0x threshold.
+        int starSize = gainSize(VP_STAR_SIZE_BASE, projection.zoom());
+        // The star sits right under the name so the two read as one block, and that block as a whole is
+        // centred on the node.
+        int starGap = 1;
+        int blockHeight = labelHeight + (vp ? starGap + starSize : showGains ? rowGap + Math.max(iconSize, labelHeight) : 0);
         int labelTop = Math.round(centerY - blockHeight * 0.5F);
         graphics.drawCenteredString(font, label, centerX, labelTop, LABEL_COLOR);
-        if (showGains) {
+        if (vp) {
+            VpStarIcon.draw(graphics, node.factionId(), centerX, labelTop + labelHeight + starGap, starSize);
+        } else if (showGains) {
             drawResourceGains(graphics, font, ammoGain, fuelGain, centerX, labelTop + labelHeight + rowGap, iconSize, iconTextGap, entryGap);
         }
     }
@@ -585,7 +621,8 @@ public final class XaeroWorldMapScreenOverlay {
                     mapScale,
                     screenWidth / 2.0D,
                     screenHeight / 2.0D));
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // LinkageError covers the class-loading failures a half-visible mod jar can produce.
             return Optional.empty();
         }
     }

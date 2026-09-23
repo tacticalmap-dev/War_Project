@@ -36,11 +36,8 @@ public final class ResourceHudOverlay {
             // A screen is open: ResourceTransferController draws the island on top of it.
             return;
         }
-        WebRenderer backend = WebRendererService.active();
-        if (backend != null) {
-            backend.renderIsland(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight());
-            return;
-        }
+        // The fused top HUD (VP war bar + island) is always drawn by the built in HTML kernel; the
+        // Chromium backend only carries the transfer panel, which never shows without a screen.
         ResourceIslandView.render(graphics, screenWidth);
         // While Chromium is being prepared the built in island keeps drawing and this line explains
         // why nothing has changed yet.

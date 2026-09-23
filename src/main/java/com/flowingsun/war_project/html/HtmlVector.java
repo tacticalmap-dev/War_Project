@@ -37,6 +37,11 @@ public final class HtmlVector {
         if (width <= 0 || height <= 0 || svg.children.isEmpty()) {
             return;
         }
+        // Rasterise denser than the element is drawn: Minecraft scales the GUI up, and a 1:1 outline
+        // would show stair steps once it is on screen.
+        int ras = HtmlTextures.rasterScale(width, height);
+        int texWidth = width * ras;
+        int texHeight = height * ras;
         double[] box = viewBox(svg);
         for (HtmlNode child : svg.children) {
             if (child.effectiveStyle().display.equals("none") || !isShape(child.tag)) {
@@ -51,17 +56,17 @@ public final class HtmlVector {
             if (subpaths.isEmpty()) {
                 continue;
             }
-            String key = "v|" + width + "x" + height + "|" + box[0] + "," + box[1] + "," + box[2] + "," + box[3]
-                    + "|" + signature(child);
-            ResourceLocation texture = HtmlTextures.texture(key, width, height,
-                    rasterize(subpaths, width, height, box));
+            String key = "v|" + texWidth + "x" + texHeight + "|" + box[0] + "," + box[1] + "," + box[2] + "," + box[3]
+                    + "|" + ras + "|" + signature(child);
+            ResourceLocation texture = HtmlTextures.texture(key, texWidth, texHeight,
+                    rasterize(subpaths, texWidth, texHeight, box), ras > 1);
             if (texture == null) {
                 return;
             }
             int tinted = (alpha << 24) | (color & 0xFFFFFF);
             graphics.setColor(((tinted >>> 16) & 0xFF) / 255.0F, ((tinted >>> 8) & 0xFF) / 255.0F,
                     (tinted & 0xFF) / 255.0F, alpha / 255.0F);
-            graphics.blit(texture, svg.x, svg.y, width, height, 0.0F, 0.0F, width, height, width, height);
+            graphics.blit(texture, svg.x, svg.y, width, height, 0.0F, 0.0F, texWidth, texHeight, texWidth, texHeight);
             graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
         }
     }

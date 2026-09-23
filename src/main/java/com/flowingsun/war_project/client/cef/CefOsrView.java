@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.cef.browser.CefBrowser;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+import org.lwjgl.system.MemoryUtil;
 import org.slf4j.Logger;
 
 import java.awt.Rectangle;
@@ -23,6 +24,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * and the upload happens during drawing. Pixels arrive as premultiplied BGRA, which is both the byte
  * order GL reads as {@code GL_BGRA} and the reason the blit switches to
  * {@code ONE, ONE_MINUS_SRC_ALPHA} blending for the duration of the draw.
+ *
+ * <h2>Incremental frames</h2>
+ *
+ * <p>Chromium reports which parts of the frame actually changed, and this class copies and uploads
+ * only those parts. A caret blink or one changed digit touches a few hundred pixels out of the several
+ * hundred thousand a 4x GUI scale surface holds, so the previous whole-frame copy plus full texture
+ * upload for every paint was the dominant cost of this backend. Two collections keep that correct:
+ * {@link #copyNow} is what the current paint call must copy into the buffer, and {@link #toUpload} is
+ * everything the buffer holds that the texture has not seen yet (damage that arrives while the render
+ * thread is busy is carried over rather than dropped, so the texture can never keep stale pixels).
+ * Both are guarded by {@link #frameLock}, which is also what makes the CEF paint thread and the render
+ * thread safe against each other.
  */
 public final class CefOsrView extends WpCefBrowser {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -31,10 +44,26 @@ public final class CefOsrView extends WpCefBrowser {
     private final String name;
     private final ResourceLocation location;
     private final AtomicBoolean dirty = new AtomicBoolean();
-    /** Guards {@link #frame}: CEF paints on its own thread while uploading/freeing happens on the render thread. */
+    /** Guards {@link #frame} and both region collections: CEF paints while the render thread uploads. */
     private final Object frameLock = new Object();
+    /** Regions the current {@code onPaint} call has to copy into the buffer. */
+    private final CefPaintRegions copyNow = new CefPaintRegions();
+    /** Regions the buffer holds that have not reached the texture yet. */
+    private final CefPaintRegions toUpload = new CefPaintRegions();
 
     private ByteBuffer frame;
+    /** Scratch buffer a single dirty region is packed into before it is handed to the driver. */
+    private ByteBuffer region;
+    private boolean warnedAboutRegion;
+    /**
+     * Frame counter above which drawing is allowed again, plus the deadline for that gate. Set when the
+     * panel opens: the texture still holds the picture from the previous time it was on screen, and
+     * blitting that would flash the old state until Chromium repaints.
+     */
+    private int drawFromFrame;
+    private long drawFromDeadlineNanos;
+    /** While now is before this, every upload covers the whole frame instead of the damaged regions. */
+    private long forceFullUntilNanos;
     private int guiWidth;
     private int guiHeight;
     private int pixelWidth;
@@ -47,6 +76,14 @@ public final class CefOsrView extends WpCefBrowser {
     private boolean disposed;
     /** Frames CEF has painted; zero means the surface content is undefined and must not be drawn. */
     private volatile int frames;
+
+    // Diagnostics: how much pixel traffic the incremental path actually saved.
+    private long copyCalls;
+    private long copiedPixels;
+    private long uploads;
+    private long uploadedPixels;
+    private long lastUploadNanos;
+    private long totalUploadNanos;
 
     public CefOsrView(String name, String page) {
         super(CefBootstrap.client(), url(page), true, null);
@@ -119,13 +156,16 @@ public final class CefOsrView extends WpCefBrowser {
             synchronized (frameLock) {
                 if (frame == null || frame.capacity() < bytes) {
                     if (frame != null) {
-                        org.lwjgl.system.MemoryUtil.memFree(frame);
+                        MemoryUtil.memFree(frame);
                     }
-                    frame = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
+                    frame = MemoryUtil.memAlloc(bytes);
                 }
                 frame.clear();
                 uploaded = false;
                 dirty.set(false);
+                copyNow.clear();
+                toUpload.clear();
+                toUpload.setFrameSize(pixelWidth, pixelHeight);
             }
         }
         resize(guiWidth, guiHeight);
@@ -142,7 +182,12 @@ public final class CefOsrView extends WpCefBrowser {
             RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
             RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
             RenderSystem.bindTexture(0);
-            clearTexture();
+            // No placeholder upload: a texture with no storage yet reads back as opaque black on real
+            // drivers, which is why the surface used to be cleared to transparent first. That clear ran
+            // after CEF's first frame had already been copied into the buffer and wiped it, leaving the
+            // texture blank until Chromium happened to paint again. It is not needed either: the first
+            // upload below always goes through glTexImage2D with a complete frame, and nothing is blitted
+            // before that (draw() refuses to touch a surface CEF has never painted).
         }
         // A resource pack reload closes every texture and clears the manager, so the adapter is
         // re-registered whenever it is missing.
@@ -152,32 +197,64 @@ public final class CefOsrView extends WpCefBrowser {
         }
     }
 
-    /**
-     * Uploads one fully transparent frame. A GL texture has undefined content until something is
-     * written to it, and on real drivers that reads back as opaque black, which is exactly the black
-     * rectangle that showed up before the first CEF frame.
-     */
-    private void clearTexture() {
-        if (frame == null || pixelWidth <= 0 || pixelHeight <= 0) {
-            return;
-        }
-        frame.clear();
-        for (int i = 0; i < frame.capacity(); i++) {
-            frame.put(i, (byte) 0);
-        }
-        RenderSystem.bindTexture(textureId);
-        RenderSystem.pixelStore(GL11.GL_UNPACK_ALIGNMENT, BYTES_PER_PIXEL);
-        RenderSystem.pixelStore(GL11.GL_UNPACK_ROW_LENGTH, pixelWidth);
-        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, pixelWidth, pixelHeight, 0,
-                GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, frame);
-        RenderSystem.pixelStore(GL11.GL_UNPACK_ROW_LENGTH, 0);
-        RenderSystem.bindTexture(0);
-        uploaded = true;
-    }
-
     /** Frames painted by CEF so far. */
     public int frameCount() {
         return frames;
+    }
+
+    /**
+     * Refuses to draw what the texture currently holds until Chromium paints a frame newer than it. The
+     * timeout is a safety net: a page that never repaints must not leave the surface permanently blank.
+     */
+    public void skipUntilNextFrame(long timeoutNanos) {
+        synchronized (frameLock) {
+            drawFromFrame = frames + 1;
+            drawFromDeadlineNanos = System.nanoTime() + Math.max(0L, timeoutNanos);
+            // Nothing was uploaded while the panel was closed, so the texture no longer matches the frame
+            // Chromium damaged against. Dropping the "uploaded" flag forces the next upload to be a whole
+            // frame, which makes the two agree again; incremental uploads after that cannot leave pieces
+            // of the old picture behind. It also keeps draw() from blitting anything until that happens.
+            uploaded = false;
+        }
+    }
+
+    /**
+     * Uploads whole frames for the given duration. Used while the panel animates: during a layout or
+     * opacity transition almost every pixel changes, and a Chromium damage list that under-reports would
+     * leave stale pixels on screen, which reads as flicker.
+     */
+    public void forceFullFrames(long durationNanos) {
+        forceFullUntilNanos = System.nanoTime() + Math.max(0L, durationNanos);
+    }
+
+    /** Texture uploads performed so far (at most one per drawn frame). */
+    public long uploadCount() {
+        return uploads;
+    }
+
+    /** Pixels that reached the texture, summed over every upload. */
+    public long uploadedPixels() {
+        return uploadedPixels;
+    }
+
+    /** Pixels copied out of CEF's frame buffer, summed over every paint. */
+    public long copiedPixels() {
+        return copiedPixels;
+    }
+
+    /** Copy operations performed, summed over every paint that had damage. */
+    public long copyCount() {
+        return copyCalls;
+    }
+
+    /** Nanoseconds spent inside the most recent texture upload. */
+    public long lastUploadNanos() {
+        return lastUploadNanos;
+    }
+
+    /** Nanoseconds spent inside texture uploads, summed. */
+    public long uploadNanos() {
+        return totalUploadNanos;
     }
 
     /** Draws the current frame scaled into the given GUI rectangle. */
@@ -189,8 +266,17 @@ public final class CefOsrView extends WpCefBrowser {
             // CEF has not painted yet: never draw, the texture has nothing meaningful in it.
             return;
         }
+        if (frames < drawFromFrame && System.nanoTime() < drawFromDeadlineNanos) {
+            // Waiting for a frame newer than the one the texture holds (see skipUntilNextFrame).
+            return;
+        }
         ensureTexture();
         upload();
+        if (!uploaded) {
+            // Nothing reached the texture (the buffer was not in a state that could be uploaded): drawing
+            // now would show whatever an uninitialised texture reads back as.
+            return;
+        }
         RenderSystem.enableBlend();
         RenderSystem.blendFunc(GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
         graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
@@ -199,12 +285,27 @@ public final class CefOsrView extends WpCefBrowser {
         RenderSystem.defaultBlendFunc();
     }
 
+    /**
+     * Pushes everything the buffer changed since the last upload into the texture. Only the tracked
+     * regions are uploaded; a first frame or a size change falls back to the whole surface.
+     *
+     * <p>Each region is packed into {@link #region} row by row and uploaded from there with
+     * {@code GL_UNPACK_ROW_LENGTH} left at 0. Uploading a region straight out of the full frame with a
+     * non-zero row length saved one copy, but it hands the driver a buffer whose readable size does not
+     * match what it reads: with a row length of {@code frameWidth} the driver walks {@code regionHeight}
+     * full rows, so a region touching the right or bottom edge makes it read past the end of the buffer.
+     * That is what faulted inside nvoglv64.dll on 2026-09-23 (crash dump hs_err_pid21068.log: render
+     * thread, {@code CefOsrView.upload} -> {@code glTexSubImage2D}, EXCEPTION_ACCESS_VIOLATION). The
+     * packed copy costs a few memcpy calls per region and makes the readable size exactly the size this
+     * method verified.
+     */
     private void upload() {
-        if (!dirty.compareAndSet(true, false)) {
+        if (!dirty.get()) {
             return;
         }
+        long startedAt = System.nanoTime();
         synchronized (frameLock) {
-            if (frame == null || disposed) {
+            if (frame == null || disposed || textureId == 0) {
                 return;
             }
             int needed = pixelWidth * pixelHeight * BYTES_PER_PIXEL;
@@ -213,20 +314,96 @@ public final class CefOsrView extends WpCefBrowser {
             if (frame.capacity() < needed || frame.limit() < needed) {
                 return;
             }
+            // Anything the driver should not see (a region outside the frame, a full-frame damage set)
+            // goes down the whole-surface path, which is always in bounds.
+            boolean full = !uploaded || toUpload.isFull() || !regionsFitFrame()
+                    || System.nanoTime() < forceFullUntilNanos;
             RenderSystem.bindTexture(textureId);
             RenderSystem.pixelStore(GL11.GL_UNPACK_ALIGNMENT, BYTES_PER_PIXEL);
-            RenderSystem.pixelStore(GL11.GL_UNPACK_ROW_LENGTH, pixelWidth);
-            frame.position(0);
-            if (!uploaded) {
-                GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, pixelWidth, pixelHeight, 0,
-                        GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, frame);
-                uploaded = true;
-            } else {
-                GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, pixelWidth, pixelHeight,
-                        GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, frame);
+            // Row pitch comes from the width argument of each call, never from a row length.
+            RenderSystem.pixelStore(GL11.GL_UNPACK_ROW_LENGTH, 0);
+            boolean pushed = false;
+            try {
+                if (full) {
+                    frame.position(0);
+                    if (!uploaded) {
+                        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, pixelWidth, pixelHeight, 0,
+                                GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, frame);
+                        uploaded = true;
+                    } else {
+                        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, pixelWidth, pixelHeight,
+                                GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, frame);
+                    }
+                    uploadedPixels += (long) pixelWidth * pixelHeight;
+                } else {
+                    uploadRegions();
+                }
+                pushed = true;
+            } finally {
+                frame.position(0);
+                if (pushed) {
+                    toUpload.clear();
+                    dirty.set(false);
+                }
+                // On failure the tracked regions and the dirty flag are kept, so the next draw retries
+                // with the same damage instead of leaving the texture permanently incomplete.
             }
+            uploads++;
+            lastUploadNanos = System.nanoTime() - startedAt;
+            totalUploadNanos += lastUploadNanos;
             RenderSystem.pixelStore(GL11.GL_UNPACK_ROW_LENGTH, 0);
             RenderSystem.bindTexture(0);
+        }
+    }
+
+    /**
+     * True when every tracked region lies inside the current frame. A region that does not is uploaded
+     * as part of a full frame instead: the driver must never be asked for pixels outside the buffer.
+     */
+    private boolean regionsFitFrame() {
+        for (int i = 0; i < toUpload.size(); i++) {
+            int x = toUpload.x(i);
+            int y = toUpload.y(i);
+            int w = toUpload.regionWidth(i);
+            int h = toUpload.regionHeight(i);
+            if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > pixelWidth || y + h > pixelHeight) {
+                if (!warnedAboutRegion) {
+                    warnedAboutRegion = true;
+                    LOGGER.warn("War Project CEF upload: region {}x{} at ({},{}) does not fit the {}x{} frame,"
+                            + " uploading the whole surface instead", w, h, x, y, pixelWidth, pixelHeight);
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Uploads each tracked region from a tightly packed copy of it, one GL call per region. */
+    private void uploadRegions() {
+        int stride = pixelWidth * BYTES_PER_PIXEL;
+        long sourceAddress = MemoryUtil.memAddress(frame);
+        for (int i = 0; i < toUpload.size(); i++) {
+            int x = toUpload.x(i);
+            int y = toUpload.y(i);
+            int w = toUpload.regionWidth(i);
+            int h = toUpload.regionHeight(i);
+            int bytes = w * h * BYTES_PER_PIXEL;
+            if (region == null || region.capacity() < bytes) {
+                if (region != null) {
+                    MemoryUtil.memFree(region);
+                }
+                region = MemoryUtil.memAlloc(bytes);
+            }
+            long rowBytes = (long) w * BYTES_PER_PIXEL;
+            long targetAddress = MemoryUtil.memAddress(region);
+            for (int row = 0; row < h; row++) {
+                long offset = (long) (y + row) * stride + (long) x * BYTES_PER_PIXEL;
+                MemoryUtil.memCopy(sourceAddress + offset, targetAddress + (long) row * rowBytes, rowBytes);
+            }
+            region.clear();
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x, y, w, h,
+                    GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, region);
+            uploadedPixels += (long) w * h;
         }
     }
 
@@ -259,26 +436,70 @@ public final class CefOsrView extends WpCefBrowser {
                 pixelHeight = height;
                 if (frame == null || frame.capacity() < bytes) {
                     if (frame != null) {
-                        org.lwjgl.system.MemoryUtil.memFree(frame);
+                        MemoryUtil.memFree(frame);
                     }
-                    frame = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
+                    frame = MemoryUtil.memAlloc(bytes);
                 }
                 uploaded = false;
+                toUpload.clear();
             }
             if (frame == null || frame.capacity() < bytes) {
                 return;
             }
-            // A frame that has not been uploaded yet is dropped rather than overwritten half way.
-            if (!dirty.compareAndSet(false, true)) {
-                return;
+            toUpload.setFrameSize(pixelWidth, pixelHeight);
+            copyNow.setFrameSize(pixelWidth, pixelHeight);
+            // A frame that arrives before the texture holds a complete picture has to fill the whole
+            // buffer; after that only the damaged regions are touched.
+            if (!uploaded) {
+                copyNow.markFull();
+            } else {
+                copyNow.clear();
+                if (rects != null) {
+                    for (Rectangle rect : rects) {
+                        if (rect != null) {
+                            copyNow.add(rect.x, rect.y, rect.width, rect.height);
+                        }
+                    }
+                }
+                if (copyNow.isEmpty()) {
+                    // No usable damage information: the texture is already complete, so there is
+                    // nothing to do.
+                    return;
+                }
             }
-            ByteBuffer source = buffer.duplicate();
-            source.position(0);
-            int available = Math.min(source.capacity(), bytes);
-            source.limit(available);
-            frame.clear();
-            frame.put(source);
-            frame.flip();
+            copyInto(copyNow, buffer, bytes);
+            toUpload.mergeWith(copyNow);
+            dirty.set(true);
+        }
+    }
+
+    /** Copies the tracked regions out of CEF's frame buffer into the buffer the render thread owns. */
+    private void copyInto(CefPaintRegions regions, ByteBuffer source, int frameBytes) {
+        long sourceAddress = MemoryUtil.memAddress(source);
+        long targetAddress = MemoryUtil.memAddress(frame);
+        int available = Math.min(source.capacity(), frameBytes);
+        int stride = pixelWidth * BYTES_PER_PIXEL;
+        copyCalls++;
+        if (regions.isFull()) {
+            long length = Math.min(available, (long) pixelWidth * pixelHeight * BYTES_PER_PIXEL);
+            MemoryUtil.memCopy(sourceAddress, targetAddress, length);
+            copiedPixels += length / BYTES_PER_PIXEL;
+            return;
+        }
+        for (int i = 0; i < regions.size(); i++) {
+            int regionX = regions.x(i);
+            int regionY = regions.y(i);
+            int regionW = regions.regionWidth(i);
+            int regionH = regions.regionHeight(i);
+            long rowBytes = (long) regionW * BYTES_PER_PIXEL;
+            for (int row = 0; row < regionH; row++) {
+                long offset = (long) (regionY + row) * stride + (long) regionX * BYTES_PER_PIXEL;
+                if (offset + rowBytes > available) {
+                    break;
+                }
+                MemoryUtil.memCopy(sourceAddress + offset, targetAddress + offset, rowBytes);
+                copiedPixels += regionW;
+            }
         }
     }
 
@@ -346,9 +567,16 @@ public final class CefOsrView extends WpCefBrowser {
         }
         synchronized (frameLock) {
             if (frame != null) {
-                org.lwjgl.system.MemoryUtil.memFree(frame);
+                MemoryUtil.memFree(frame);
                 frame = null;
             }
+            if (region != null) {
+                MemoryUtil.memFree(region);
+                region = null;
+            }
+            copyNow.clear();
+            toUpload.clear();
+            dirty.set(false);
         }
     }
 

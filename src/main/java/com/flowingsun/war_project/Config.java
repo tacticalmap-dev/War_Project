@@ -55,6 +55,16 @@ public final class Config {
             .comment("Maximum fuel a single transfer may send.")
             .defineInRange("transferMaxFuelPerRequest", 25.0D, 1.0D, 999.0D);
 
+    private static final ForgeConfigSpec.DoubleValue VP_WAR_SCORE_START = BUILDER
+            .comment("Starting war score of every allied cluster (side) shown on the VP progress bar.",
+                    "The score drops while the opposing sides hold VP nodes; a side reaching zero ends the game.")
+            .defineInRange("vpWarScoreStart", 500.0D, 1.0D, 1000000.0D);
+
+    private static final ForgeConfigSpec.DoubleValue VP_WAR_DRAIN_PER_MINUTE_PER_NODE = BUILDER
+            .comment("Points per minute the opposing side loses for every VP node this side holds.",
+                    "Several VP nodes add up (three nodes -> 3x this value per minute).")
+            .defineInRange("vpWarDrainPerMinutePerNode", 30.0D, 0.0D, 100000.0D);
+
     private static final ForgeConfigSpec.ConfigValue<String> WEB_RENDERER = BUILDER
             .comment("Which backend draws the resource island and the transfer panel.",
                     "auto     - use Chromium when it is available, otherwise the built in HTML renderer",
@@ -70,6 +80,33 @@ public final class Config {
             .comment("Log Chromium surface diagnostics (frames, uploads, frame time) every 60 seconds.")
             .define("webDiagnostics", false);
 
+    private static final ForgeConfigSpec.IntValue CEF_MAX_FRAME_RATE = BUILDER
+            .comment("Upper bound on how many frames per second the Chromium surface may produce.",
+                    "Chromium only paints while its message loop is pumped, so this is the real frame",
+                    "rate: the pages are static apart from short transitions, and a lower value means",
+                    "less CPU for a surface nobody is animating. 30 is plenty for this interface.",
+                    "Only the Chromium backend uses it.")
+            .defineInRange("cefMaxFrameRate", 30, 1, 240);
+
+    private static final ForgeConfigSpec.BooleanValue CEF_LAZY_START = BUILDER
+            .comment("Start Chromium only when the interface first has to be shown instead of at game",
+                    "startup. A session that never shows the island then runs without any browser",
+                    "process at all (no idle CPU, no ~150 MiB of helper processes); the built in",
+                    "renderer draws the island until Chromium is up.")
+            .define("cefLazyStart", true);
+
+    private static final ForgeConfigSpec.BooleanValue CEF_USE_GPU = BUILDER
+            .comment("Let Chromium rasterise and composite on the graphics card instead of the CPU.",
+                    "Both modes hand the finished pixels back to the game as a CPU bitmap (the",
+                    "java-cef bindings have no shared-texture path), so the GPU mode additionally pays",
+                    "for a GPU-to-CPU read back and for a GPU process competing with Minecraft.",
+                    "Measured on the Intel UHD 630 of this machine with a 704x600 surface: hardware",
+                    "GPU ~14% of one core, software (SwiftShader) ~9%. Default false therefore, and",
+                    "true is there for machines where the calculation comes out the other way.",
+                    "Setting this changes the real Chromium command line: with false it starts with",
+                    "--disable-gpu and friends, with true it does not.")
+            .define("cefUseGpu", false);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static double nodeCaptureBaseSeconds;
@@ -83,9 +120,14 @@ public final class Config {
     public static double transferCooldownSeconds = 120.0D;
     public static double transferMaxAmmoPerRequest = 50.0D;
     public static double transferMaxFuelPerRequest = 25.0D;
+    public static double vpWarScoreStart = 500.0D;
+    public static double vpWarDrainPerMinutePerNode = 30.0D;
     public static String webRenderer = "auto";
     public static String cefMirror = "";
     public static boolean webDiagnostics;
+    public static int cefMaxFrameRate = 30;
+    public static boolean cefLazyStart = true;
+    public static boolean cefUseGpu;
 
     private Config() {
     }
@@ -103,8 +145,13 @@ public final class Config {
         transferCooldownSeconds = TRANSFER_COOLDOWN_SECONDS.get();
         transferMaxAmmoPerRequest = TRANSFER_MAX_AMMO.get();
         transferMaxFuelPerRequest = TRANSFER_MAX_FUEL.get();
+        vpWarScoreStart = VP_WAR_SCORE_START.get();
+        vpWarDrainPerMinutePerNode = VP_WAR_DRAIN_PER_MINUTE_PER_NODE.get();
         webRenderer = WEB_RENDERER.get();
         cefMirror = CEF_MIRROR.get();
         webDiagnostics = WEB_DIAGNOSTICS.get();
+        cefMaxFrameRate = CEF_MAX_FRAME_RATE.get();
+        cefLazyStart = CEF_LAZY_START.get();
+        cefUseGpu = CEF_USE_GPU.get();
     }
 }

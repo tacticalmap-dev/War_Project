@@ -1,6 +1,7 @@
 package com.flowingsun.war_project.compat.xaero;
 
 import com.flowingsun.war_project.client.ClientMapState;
+import com.flowingsun.war_project.client.VpStarIcon;
 import com.flowingsun.war_project.client.xaero.XaeroWarProjectMapRenderer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
@@ -30,6 +31,8 @@ public final class XaeroMinimapOverlay {
     /** Everything outside the map area; slightly stronger than the world map's haze. */
     private static final int OUT_OF_BOUNDS_COLOR = 0x44FF3B30;
     private static final float LABEL_SCALE = 2.0F;
+    /** Star under a VP node's name, in minimap-local pixels before {@link #LABEL_SCALE} is applied. */
+    private static final int VP_STAR_SIZE = 8;
     private static final double LABEL_EDGE_MARGIN = 10.0D;
     private static Field psField;
     private static Field pcField;
@@ -209,7 +212,12 @@ public final class XaeroMinimapOverlay {
             graphics.pose().translate((float) local[0], (float) local[1], 0.0F);
             // The minimap is small, so its labels are scaled up from the default font size.
             graphics.pose().scale(LABEL_SCALE, LABEL_SCALE, 1.0F);
-            graphics.drawCenteredString(minecraft.font, label, 0, Math.round(-4.0F / LABEL_SCALE), LABEL_COLOR);
+            int labelY = Math.round(-4.0F / LABEL_SCALE);
+            graphics.drawCenteredString(minecraft.font, label, 0, labelY, LABEL_COLOR);
+            if (node.vp()) {
+                // Same star as the world map, one line under the name, drawn inside the scaled pose.
+                VpStarIcon.draw(graphics, node.factionId(), 0, labelY + minecraft.font.lineHeight + 1, VP_STAR_SIZE);
+            }
             graphics.pose().popPose();
         }
     }

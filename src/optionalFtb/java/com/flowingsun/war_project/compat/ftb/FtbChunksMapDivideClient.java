@@ -51,6 +51,9 @@ public final class FtbChunksMapDivideClient {
     private static final int WARZONE_SELECT_FILL = 0x50FFD84A;
     private static final int WARZONE_SELECT_EDGE = 0xFFFFD84A;
     private static final int TOOLBAR_BG = 0xAA202225;
+    /** Playable map area on the FTB map: the same haze colour the Xaero world map uses, plus a bright edge. */
+    private static final int MAP_OUTSIDE_FILL = 0x38FF3B30;
+    private static final int MAP_EDGE = 0xFFFF8B80;
     private static final int TOOLBAR_ACTIVE = 0x803F88FF;
     private static final int TOOLBAR_LEFT = 20;
     private static final int TOOLBAR_MARGIN = 1;
@@ -103,6 +106,7 @@ public final class FtbChunksMapDivideClient {
             event.getGuiGraphics().pose().pushPose();
             event.getGuiGraphics().pose().translate(0.0F, 0.0F, MAP_OVERLAY_Z);
             GuiHelper.setupDrawing();
+            drawMapBounds(event.getGuiGraphics(), mapContext);
             drawExisting(event.getGuiGraphics(), mapContext);
             drawSelection(event.getGuiGraphics(), mapContext);
             event.getGuiGraphics().pose().popPose();
@@ -257,6 +261,9 @@ public final class FtbChunksMapDivideClient {
                 dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("ID: " + target.id() + "  chunks: " + target.chunks().size())),
                 dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Ammo: " + formatAmount(target.ammoPerMinute()) + " / 60s")),
                 dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("Fuel: " + formatAmount(target.fuelPerMinute()) + " / 60s")),
+                dev.ftb.mods.ftblibrary.ui.ContextMenuItem.title(Component.literal("VP node: " + (target.vp() ? "yes" : "no"))),
+                new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal(target.vp() ? "Clear VP marker" : "Mark as VP node"),
+                        Icons.ACCEPT, button -> WarProjectNetwork.sendSetNodeVp(target.id(), !target.vp())),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Edit node"), Icons.ACCEPT, button -> openRenameNodePrompt(largeMap, target)),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Set ammo output"), Icons.ACCEPT, button -> openResourcePrompt(largeMap, target, true)),
                 new dev.ftb.mods.ftblibrary.ui.ContextMenuItem(Component.literal("Set fuel output"), Icons.ACCEPT, button -> openResourcePrompt(largeMap, target, false)),
@@ -274,11 +281,15 @@ public final class FtbChunksMapDivideClient {
         schedulePrompt(() -> {
             NameIdPromptOverlay overlay = new NameIdPromptOverlay(screen.getGui(), Component.literal("Edit Node"),
                     "Node Name", displayName(node.name(), node.id()),
-                    "Node ID", node.id(), (accepted, name, id) -> {
+                    "Node ID", node.id(), node.vp(), (accepted, name, id, vp) -> {
                         if (!accepted) {
                             return;
                         }
                         WarProjectNetwork.sendRenameNode(node.id(), id, name);
+                        if (vp != node.vp()) {
+                            // The same panel doubles as the VP switch, so a change made here is applied too.
+                            WarProjectNetwork.sendSetNodeVp(id, vp);
+                        }
                     }).atMousePosition();
             overlay.setExtraZlevel(INPUT_MODAL_Z);
             screen.getGui().pushModalPanel(overlay);
@@ -290,6 +301,10 @@ public final class FtbChunksMapDivideClient {
      * both values (the untouched one unchanged), so the server always stores a complete pair.
      */
     private static void openResourcePrompt(LargeMapScreen screen, ClientMapState.ClientNode node, boolean ammo) {
+        if (node.vp()) {
+            showClientMessage("Node " + node.id() + " is a VP node and produces nothing; clear its VP flag first.");
+            return;
+        }
         String label = ammo ? "Ammo per 60s" : "Fuel per 60s";
         String current = formatAmount(ammo ? node.ammoPerMinute() : node.fuelPerMinute());
         schedulePrompt(() -> {
@@ -350,11 +365,11 @@ public final class FtbChunksMapDivideClient {
 
     private static void openNodePrompt(LargeMapScreen screen, String fallbackId) {
         NameIdPromptOverlay overlay = new NameIdPromptOverlay(screen.getGui(), Component.literal("Create Node"),
-                "Node Name", fallbackId, "Node ID", fallbackId, (accepted, name, id) -> {
+                "Node Name", fallbackId, "Node ID", fallbackId, false, (accepted, name, id, vp) -> {
                     if (!accepted) {
                         return;
                     }
-                    pendingNode = new PendingNode(id, name, new LinkedHashSet<>(nodeSelection), defaultColor());
+                    pendingNode = new PendingNode(id, name, new LinkedHashSet<>(nodeSelection), defaultColor(), vp);
                     warzoneSelection.clear();
                     warzoneSelection.addAll(nodeSelection);
                     mode = Mode.WARZONE;
@@ -379,7 +394,8 @@ public final class FtbChunksMapDivideClient {
             showClientMessage("Warzone needs at least one non-node chunk.");
             return;
         }
-        WarProjectNetwork.sendCreateNodeWarzone(pendingNode.id(), pendingNode.name(), pendingNode.nodeChunks(), warzoneSelection, pendingNode.colorRgb());
+        WarProjectNetwork.sendCreateNodeWarzone(pendingNode.id(), pendingNode.name(), pendingNode.nodeChunks(), warzoneSelection,
+                pendingNode.colorRgb(), pendingNode.vp());
         clearState();
     }
 
@@ -399,6 +415,50 @@ public final class FtbChunksMapDivideClient {
     private static void schedulePrompt(Runnable prompt) {
         pendingPrompt = prompt;
         pendingPromptDelayTicks = 1;
+    }
+
+    /**
+     * Outlines the playable map area: everything outside it is washed in translucent red and the edge gets a
+     * solid border, so the boundary reads the same on the FTB map as it does on the Xaero maps. Drawn before
+     * the nodes and warzones so their colours stay on top of the wash.
+     */
+    private static void drawMapBounds(GuiGraphics graphics, MapContext context) {
+        ClientMapState.ClientBounds bounds = ClientMapState.bounds();
+        if (bounds == null) {
+            return;
+        }
+        Rect area = context.rectForChunks(bounds.minChunkX(), bounds.minChunkZ(), bounds.maxChunkX(), bounds.maxChunkZ());
+        int panelRight = context.panelX + context.panelWidth;
+        int panelBottom = context.panelY + context.panelHeight;
+        int left = Math.max(area.x1, context.panelX);
+        int right = Math.min(area.x2, panelRight);
+        int top = Math.max(area.y1, context.panelY);
+        int bottom = Math.min(area.y2, panelBottom);
+        // Four bars clamped to the panel, so the wash never spills over the surrounding FTB UI.
+        fillBar(graphics, context.panelX, context.panelY, panelRight, top, MAP_OUTSIDE_FILL);
+        fillBar(graphics, context.panelX, bottom, panelRight, panelBottom, MAP_OUTSIDE_FILL);
+        fillBar(graphics, context.panelX, top, left, bottom, MAP_OUTSIDE_FILL);
+        fillBar(graphics, right, top, panelRight, bottom, MAP_OUTSIDE_FILL);
+        // The border only when that edge itself is inside the panel.
+        if (area.x1 >= context.panelX && area.x1 < panelRight) {
+            fillBar(graphics, area.x1, top, area.x1 + 1, bottom, MAP_EDGE);
+        }
+        if (area.x2 > context.panelX && area.x2 <= panelRight) {
+            fillBar(graphics, area.x2 - 1, top, area.x2, bottom, MAP_EDGE);
+        }
+        if (area.y1 >= context.panelY && area.y1 < panelBottom) {
+            fillBar(graphics, left, area.y1, right, area.y1 + 1, MAP_EDGE);
+        }
+        if (area.y2 > context.panelY && area.y2 <= panelBottom) {
+            fillBar(graphics, left, area.y2 - 1, right, area.y2, MAP_EDGE);
+        }
+    }
+
+    /** Fills a rectangle, skipping degenerate ranges so an off-screen boundary simply draws nothing. */
+    private static void fillBar(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+        if (x2 > x1 && y2 > y1) {
+            graphics.fill(x1, y1, x2, y2, color);
+        }
     }
 
     private static void drawExisting(GuiGraphics graphics, MapContext context) {
@@ -521,7 +581,7 @@ public final class FtbChunksMapDivideClient {
 
     @FunctionalInterface
     private interface NameIdCallback {
-        void accept(boolean accepted, String name, String id);
+        void accept(boolean accepted, String name, String id, boolean vp);
     }
 
     @FunctionalInterface
@@ -529,7 +589,7 @@ public final class FtbChunksMapDivideClient {
         void accept(boolean accepted, double value);
     }
 
-    private record PendingNode(String id, String name, Set<Long> nodeChunks, int colorRgb) {
+    private record PendingNode(String id, String name, Set<Long> nodeChunks, int colorRgb, boolean vp) {
     }
 
     private record Rect(int x1, int y1, int x2, int y2) {
@@ -618,6 +678,13 @@ public final class FtbChunksMapDivideClient {
             int blockX = (int) Math.floor(regionX * 512.0D);
             int blockZ = (int) Math.floor(regionZ * 512.0D);
             return new ChunkPos(Math.floorDiv(blockX, 16), Math.floorDiv(blockZ, 16));
+        }
+
+        /** Screen rectangle spanning a whole chunk range; the far corner uses the next chunk's origin. */
+        Rect rectForChunks(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ) {
+            Rect origin = rectForChunk(minChunkX, minChunkZ);
+            Rect far = rectForChunk(maxChunkX + 1, maxChunkZ + 1);
+            return new Rect(origin.x1, origin.y1, far.x1, far.y1);
         }
 
         Rect rectForChunk(int chunkX, int chunkZ) {
@@ -727,7 +794,7 @@ public final class FtbChunksMapDivideClient {
 
     private static final class NameIdPromptOverlay extends ModalPanel {
         private static final int WIDTH = 190;
-        private static final int HEIGHT = 104;
+        private static final int HEIGHT = 122;
         private final Component title;
         private final String nameLabel;
         private final String idLabel;
@@ -736,13 +803,17 @@ public final class FtbChunksMapDivideClient {
         private final TextBox idBox;
         private SimpleTextButton acceptButton;
         private SimpleTextButton cancelButton;
+        private SimpleTextButton vpButton;
+        /** The VP marker as edited in this panel; it only reaches the server when the panel is accepted. */
+        private boolean vp;
         private boolean closed;
 
-        private NameIdPromptOverlay(Panel parent, Component title, String nameLabel, String nameFallback, String idLabel, String idFallback, NameIdCallback callback) {
+        private NameIdPromptOverlay(Panel parent, Component title, String nameLabel, String nameFallback, String idLabel, String idFallback, boolean vp, NameIdCallback callback) {
             super(parent);
             this.title = title;
             this.nameLabel = nameLabel;
             this.idLabel = idLabel;
+            this.vp = vp;
             this.callback = callback;
             setSize(WIDTH, HEIGHT);
             nameBox = new TextBox(this);
@@ -762,6 +833,16 @@ public final class FtbChunksMapDivideClient {
         public void addWidgets() {
             add(nameBox);
             add(idBox);
+            vpButton = new SimpleTextButton(this, Component.literal("Toggle VP"), Icons.ACCEPT) {
+                @Override
+                public void onClicked(MouseButton button) {
+                    if (button.isLeft()) {
+                        vp = !vp;
+                        playClickSound();
+                    }
+                }
+            };
+            add(vpButton);
             acceptButton = SimpleTextButton.accept(this, button -> submit(true));
             cancelButton = SimpleTextButton.cancel(this, button -> submit(false));
             add(acceptButton);
@@ -772,8 +853,9 @@ public final class FtbChunksMapDivideClient {
         public void alignWidgets() {
             nameBox.setPosAndSize(8, 25, WIDTH - 16, 14);
             idBox.setPosAndSize(8, 55, WIDTH - 16, 14);
-            acceptButton.setPosAndSize(8, 80, 84, 16);
-            cancelButton.setPosAndSize(WIDTH - 92, 80, 84, 16);
+            vpButton.setPosAndSize(8, 78, 84, 16);
+            acceptButton.setPosAndSize(8, 100, 84, 16);
+            cancelButton.setPosAndSize(WIDTH - 92, 100, 84, 16);
         }
 
         @Override
@@ -795,6 +877,8 @@ public final class FtbChunksMapDivideClient {
             theme.drawString(graphics, title, x + 8, y + 6, Color4I.WHITE, Theme.SHADOW);
             theme.drawString(graphics, nameLabel, x + 8, y + 17, Color4I.WHITE.withAlpha(220), Theme.SHADOW);
             theme.drawString(graphics, idLabel, x + 8, y + 47, Color4I.WHITE.withAlpha(220), Theme.SHADOW);
+            theme.drawString(graphics, Component.literal("VP node: " + (vp ? "ON" : "OFF")), x + 98, y + 82,
+                    vp ? Color4I.rgba(0xFFFFD84A) : Color4I.WHITE.withAlpha(200), Theme.SHADOW);
         }
 
         private void submit(boolean accepted) {
@@ -803,7 +887,7 @@ public final class FtbChunksMapDivideClient {
             }
             closed = true;
             getGui().closeModalPanel(this);
-            callback.accept(accepted, nameBox.getText(), idBox.getText());
+            callback.accept(accepted, nameBox.getText(), idBox.getText(), vp);
         }
     }
 

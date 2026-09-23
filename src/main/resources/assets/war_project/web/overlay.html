@@ -5,7 +5,7 @@
 <style>
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   body { font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; color: #fff;
-    -webkit-font-smoothing: antialiased; font-size: 7px; }
+    -webkit-font-smoothing: antialiased; font-size: 6px; }
   .stack { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center; }
   /* One black slab: collapsed it is the island bar, expanded it grows downwards into the roster. */
   /* Collapsed the slab hugs its content (the width is measured in script so it can still animate);
@@ -16,46 +16,55 @@
     opacity: 0; transition: opacity .16s ease, width .22s cubic-bezier(.2,.8,.25,1),
       height .22s cubic-bezier(.2,.8,.25,1), border-radius .22s ease; }
   .slab.shown { opacity: 1; }
-  .slab.open { width: 206px; height: 196px; border-radius: 10px; }
+  /* Expanded, the panel is the island's own footprint grown downwards: the width comes from the
+     island's measured width (a CSS variable the script sets), the height is fixed. */
+  .slab.open { width: var(--pw, 136px); height: 110px; border-radius: 8px; }
   /* Symmetric side padding keeps the bar visually balanced: without it the content sat flush against
      both edges and the text side bearings made the right end read shorter. */
+  /* Measurement only: this bar's max-content width IS the island's width, which Java needs for the
+     panel width and the click target. The island itself is painted by the built in top HUD right above
+     this surface, so drawing this copy would flash a second island while the panel animates. */
   .bar { height: 16px; display: flex; align-items: center; justify-content: center; gap: 3px;
-    padding: 0 7px; box-sizing: border-box; font-size: 7px; line-height: 1; white-space: nowrap; }
+    padding: 0 7px; box-sizing: border-box; font-size: 6px; line-height: 1; white-space: nowrap;
+    opacity: 0; }
   .icon { width: 12px; height: 12px; display: block; }
   .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
   .rate { color: #7ce38b; font-variant-numeric: tabular-nums; }
   .sep { width: 1px; height: 10px; background: #ffffff26; margin: 0 1px; }
   /* Absolutely positioned so it never contributes to the slab's intrinsic (max-content) width: the
      collapsed slab must hug the island numbers only. */
-  .body { position: absolute; left: 0; right: 0; top: 16px; bottom: 0; display: flex; flex-direction: column;
-    gap: 4px; padding: 4px 8px 8px 8px; box-sizing: border-box; opacity: 0; transition: opacity .14s ease; }
-  .slab.open .body { opacity: 1; transition: opacity .18s ease .07s; }
-  .head { display: flex; align-items: center; justify-content: space-between; font-size: 8px; font-weight: 600; }
-  .sub { font-size: 7px; color: #9fb0c6; font-weight: 400; }
+  /* Pinned to the slab's own top edge: collapsed it is clipped to nothing, and while the slab grows
+     the content unrolls out of the island's footprint instead of sliding down from behind the bar. */
+  .body { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column;
+    gap: 2px; padding: 2px 5px 4px 5px; box-sizing: border-box; opacity: 0; transition: opacity .14s ease; }
+  /* Later than the growth: the contents must not appear inside the still tiny panel. */
+  .slab.open .body { opacity: 1; transition: opacity .18s ease .14s; }
+  .head { display: flex; align-items: center; justify-content: space-between; font-size: 7px; font-weight: 600; }
+  .sub { font-size: 6px; color: #9fb0c6; font-weight: 400; }
   .roster { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
   .roster::-webkit-scrollbar { width: 4px; }
   .roster::-webkit-scrollbar-thumb { background: #ffffff2e; border-radius: 2px; }
-  .row { display: flex; align-items: center; gap: 5px; padding: 2px 5px; border-radius: 5px;
+  .row { display: flex; align-items: center; gap: 4px; padding: 1px 4px; border-radius: 4px;
     cursor: pointer; transition: background .12s ease; }
   .row:hover { background: #ffffff1a; }
   .row.sel { background: #ffffff26; box-shadow: inset 0 0 0 1px #ffffff59; }
   .row.off { opacity: .4; cursor: default; }
   .name { flex: 1; }
-  .val { color: #b9c6d6; font-size: 7px; font-variant-numeric: tabular-nums; }
-  .entry { display: flex; align-items: center; gap: 5px; }
-  .label { color: #9fb0c6; font-size: 7px; }
+  .val { color: #b9c6d6; font-size: 6px; font-variant-numeric: tabular-nums; }
+  .entry { display: flex; align-items: center; gap: 4px; }
+  .label { color: #9fb0c6; font-size: 6px; }
   input { flex: 1; min-width: 0; box-sizing: border-box; background: #ffffff12; border: 1px solid #ffffff26;
-    border-radius: 5px; color: #fff; padding: 2px 5px; font-size: 7px; outline: none; font-family: inherit;
+    border-radius: 4px; color: #fff; padding: 1px 4px; font-size: 6px; outline: none; font-family: inherit;
     font-variant-numeric: tabular-nums; }
   input:focus { border-color: #ffffff59; }
-  .actions { display: flex; gap: 5px; }
-  button { flex: 1; border: 1px solid #ffffff1f; border-radius: 6px; padding: 4px 6px; font-size: 7px;
+  .actions { display: flex; gap: 4px; }
+  button { flex: 1; border: 1px solid #ffffff1f; border-radius: 5px; padding: 3px 5px; font-size: 6px;
     color: #fff; background: #ffffff12; cursor: pointer; font-family: inherit; transition: background .12s ease; }
   button:hover { background: #ffffff26; }
   button.primary { background: #2b7ffb; border-color: #2b7ffb; }
   button.primary:hover { background: #3f8dfd; }
   button:disabled { opacity: .45; cursor: default; background: #ffffff0d; border-color: #ffffff14; }
-  .result { min-height: 11px; font-size: 7px; color: #9fb0c6; }
+  .result { min-height: 8px; font-size: 6px; color: #9fb0c6; }
   .result.ok { color: #7ce38b; }
   .result.fail { color: #ff9a9a; }
 </style>
@@ -93,16 +102,31 @@
     var amount = document.getElementById('amount');
     var confirmButton = document.getElementById('confirm');
     var result = document.getElementById('result');
+    var titleEl = document.getElementById('title');
+    var heldEl = document.getElementById('held');
+    var limitEl = document.getElementById('limit');
+    var ammoEl = document.getElementById('ammo');
+    var ammoRateEl = document.getElementById('ammoRate');
+    var fuelEl = document.getElementById('fuel');
+    var fuelRateEl = document.getElementById('fuelRate');
     var snapshot = { teammates: [] };
     var kind = 'ammo';
     var barWidth = 0;
     var selected = null;
     var pending = false;
     var closeTimer = 0;
-    var PANEL_WIDTH = 206;
+    // Expanded size, in GUI pixels: fixed height, width clamped to what the roster still fits in.
+    var PANEL_WIDTH = 136;
+    var PANEL_MIN = 132;
+    var openWidth = PANEL_WIDTH;
     var cooldownSeconds = 120;
     var cooldownUntil = 0;
     var cooldownTimer = 0;
+    // Last values written to the document. Every write invalidates layout, and the bar is re-measured
+    // only when its text actually changed, so a snapshot that says the same thing costs nothing.
+    var lastBarText = '';
+    var lastRosterKey = '';
+    var lastControlsKey = '';
 
     function translate(message) {
       if (!message) { return ''; }
@@ -193,6 +217,9 @@
     // side where the clickable bar is.
     function fitBar() {
       if (slab.classList.contains('open')) { return; }
+      // Resting state again: no pinned height and no fade-out left over from closing.
+      slab.style.height = '';
+      slab.style.opacity = '';
       var width = measureBarWidth();
       slab.style.transition = 'none';
       slab.style.width = width + 'px';
@@ -204,9 +231,20 @@
       }
     }
 
-    function render() {
-      document.getElementById('title').textContent = '转移' + kindName();
-      document.getElementById('held').textContent = '持有 ' + heldOf() + ' · +' + rateOf() + '/分';
+    // Everything the roster shows, selection included. Rebuilding the list is by far the most expensive
+    // thing this page does, so it is skipped unless one of these values really changed.
+    function rosterKey() {
+      var parts = [kind, selected === null ? '' : selected];
+      snapshot.teammates.forEach(function (member) {
+        parts.push(member.name, member.online ? '1' : '0', member.ammo, member.fuel);
+      });
+      return parts.join('|');
+    }
+
+    function updateRoster() {
+      var key = rosterKey();
+      if (key === lastRosterKey) { return; }
+      lastRosterKey = key;
       roster.innerHTML = '';
       if (!snapshot.teammates.length) {
         var empty = document.createElement('div');
@@ -234,13 +272,37 @@
         }
         roster.appendChild(row);
       });
+    }
+
+    // The headline numbers, the limit, and the confirm button (which counts the cooldown down). All of
+    // them are plain text writes, and all of them are skipped while they would write the same value.
+    function updateControls() {
+      var key = [kind, heldOf(), rateOf(), maxAmount(), pending ? 1 : 0, selected === null ? '' : selected,
+        cooldownLeft()].join('|');
+      if (key === lastControlsKey) { return; }
+      lastControlsKey = key;
+      titleEl.textContent = '转移' + kindName();
+      heldEl.textContent = '持有 ' + heldOf() + ' · +' + rateOf() + '/分';
       var limit = maxAmount();
-      document.getElementById('limit').textContent = '上限 ' + limit;
+      limitEl.textContent = '上限 ' + limit;
       var value = parseInt(amount.value, 10);
       if (isNaN(value) || value < 1) { amount.value = limit > 0 ? '1' : '0'; }
       var cooling = cooldownLeft();
-      confirmButton.disabled = pending || cooling > 0 || !selected || maxAmount() <= 0;
+      confirmButton.disabled = pending || cooling > 0 || !selected || limit <= 0;
       confirmButton.textContent = cooling > 0 ? ('冷却 ' + cooling + 's') : '确认';
+    }
+
+    function render() {
+      updateRoster();
+      updateControls();
+    }
+
+    // Forces the next render to touch the document even if nothing it compares has changed; used when
+    // the panel opens, where the DOM still holds the state of the previous session.
+    function renderForced() {
+      lastRosterKey = '';
+      lastControlsKey = '';
+      render();
     }
 
     function submit() {
@@ -270,12 +332,25 @@
         var visible = !!(next.running && next.hasTeam);
         slab.classList.toggle('shown', visible);
         if (!visible) { slab.classList.remove('open'); }
-        document.getElementById('ammo').textContent = next.ammo;
-        document.getElementById('ammoRate').textContent = '+' + next.ammoRate;
-        document.getElementById('fuel').textContent = next.fuel;
-        document.getElementById('fuelRate').textContent = '+' + next.fuelRate;
-        render();
-        fitBar();
+        var ammoText = String(next.ammo);
+        var ammoRateText = '+' + next.ammoRate;
+        var fuelText = String(next.fuel);
+        var fuelRateText = '+' + next.fuelRate;
+        var barText = ammoText + '|' + ammoRateText + '|' + fuelText + '|' + fuelRateText;
+        // The bar is the only thing on screen while the panel is collapsed. Writing its four texts and
+        // measuring its width are the two things that cost a layout pass, so both are driven by whether
+        // the text actually changed; a snapshot that repeats itself now costs nothing at all.
+        if (barText !== lastBarText) {
+          lastBarText = barText;
+          if (ammoEl.textContent !== ammoText) { ammoEl.textContent = ammoText; }
+          if (ammoRateEl.textContent !== ammoRateText) { ammoRateEl.textContent = ammoRateText; }
+          if (fuelEl.textContent !== fuelText) { fuelEl.textContent = fuelText; }
+          if (fuelRateEl.textContent !== fuelRateText) { fuelRateEl.textContent = fuelRateText; }
+          fitBar();
+        }
+        // The roster and the controls only exist while the panel is open: rebuilding them for a
+        // collapsed bar would lay out and repaint a hidden list on every resource settlement.
+        if (slab.classList.contains('open')) { render(); }
       },
       openPanel: function (options) {
         kind = options.kind === 'fuel' ? 'fuel' : 'ammo';
@@ -287,18 +362,24 @@
         result.className = 'result';
         result.textContent = '';
         if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = 0; }
-        // Start the growth from the measured collapsed width so both directions animate.
+        // The panel grows out of the island's own footprint: it starts exactly as wide as the island
+        // and with no height at all, flush under the island's lower edge, then unwraps to the panel.
         var collapsed = barWidth > 0 ? barWidth : measureBarWidth();
+        openWidth = Math.max(PANEL_MIN, Math.min(PANEL_WIDTH, collapsed));
+        slab.style.setProperty('--pw', openWidth + 'px');
         slab.style.transition = 'none';
         slab.style.width = collapsed + 'px';
+        slab.style.height = '0px';
+        slab.style.opacity = '';
         void slab.offsetWidth;
         slab.style.transition = '';
         slab.classList.add('on');
         slab.classList.add('shown');
         slab.classList.add('open');
         slab.style.width = '';
+        slab.style.height = '';
         amount.value = '1';
-        render();
+        renderForced();
         amount.focus();
         amount.select();
       },
@@ -310,10 +391,15 @@
         // Shrink with animation: pin the expanded width first, because a pixel width cannot be
         // interpolated to max-content (that jump is why the collapse used to snap).
         var collapsed = barWidth > 0 ? barWidth : measureBarWidth();
-        slab.style.width = PANEL_WIDTH + 'px';
+        slab.style.width = openWidth + 'px';
+        slab.style.height = slab.getBoundingClientRect().height + 'px';
         void slab.offsetWidth;
         slab.classList.remove('open');
+        // Folds back into the island: the width returns to the island's and the height collapses to
+        // nothing, while the slab fades so it never lingers as a small black bar under the island.
         slab.style.width = collapsed + 'px';
+        slab.style.height = '0px';
+        slab.style.opacity = '0';
         pending = false;
         result.className = 'result';
         result.textContent = '';

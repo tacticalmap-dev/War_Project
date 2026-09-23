@@ -14,6 +14,11 @@ import net.minecraft.world.entity.Entity;
  */
 public final class SuperbWarfareCompat {
     private static final String SBW_VEHICLE_PACKAGE = "com.atsuishio.superbwarfare.entity.vehicle";
+    /** SBW's client-side state holder; {@code zoomVehicle} is set while HOLD_ZOOM is held in a vehicle. */
+    private static final String SBW_CLIENT_EVENT_HANDLER = "com.atsuishio.superbwarfare.event.ClientEventHandler";
+
+    private static boolean zoomLookupDone;
+    private static java.lang.reflect.Field zoomVehicleField;
 
     private SuperbWarfareCompat() {
     }
@@ -29,6 +34,47 @@ public final class SuperbWarfareCompat {
         }
         Entity vehicle = minecraft.player.getVehicle();
         return vehicle != null && isSuperbWarfareVehicle(vehicle);
+    }
+
+    /**
+     * True while the vehicle gun sight is up, including the third person case: sitting in an SBW
+     * vehicle and holding the gun-sight key keeps the vanilla camera third person, so
+     * {@link #isVehicleFirstPerson()} alone would miss it. SBW's own state is read reflectively
+     * ({@code ClientEventHandler.zoomVehicle}, set by its ClickEventHandler for HOLD_ZOOM), so this
+     * class stays free of any compile-time dependency on that mod.
+     */
+    public static boolean isVehicleGunSight() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return false;
+        }
+        Entity vehicle = minecraft.player.getVehicle();
+        if (vehicle == null || !isSuperbWarfareVehicle(vehicle)) {
+            return false;
+        }
+        if (minecraft.options.getCameraType().isFirstPerson()) {
+            return true;
+        }
+        return isZoomingVehicle();
+    }
+
+    private static boolean isZoomingVehicle() {
+        if (!zoomLookupDone) {
+            zoomLookupDone = true;
+            try {
+                zoomVehicleField = Class.forName(SBW_CLIENT_EVENT_HANDLER).getField("zoomVehicle");
+            } catch (Throwable missing) {
+                zoomVehicleField = null;
+            }
+        }
+        if (zoomVehicleField == null) {
+            return false;
+        }
+        try {
+            return zoomVehicleField.getBoolean(null);
+        } catch (Throwable failed) {
+            return false;
+        }
     }
 
     private static boolean isSuperbWarfareVehicle(Entity entity) {

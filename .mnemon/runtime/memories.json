@@ -9,9 +9,9 @@
       "importance": "normal"
     },
     {
-      "content": "War Project 规则基线（用户明确定下，勿再询问）：node 用字符串 id 作真实主键；占领始终允许（无战时/和平状态、无城镇层级）；删除全部客户端命令，只留 /warproject 服务端命令；FTB/Architectury/Xaero 均为可选依赖；Xaero 中 node 边界实线、战区边界虚线且虚线长度随缩放，世界地图最小缩放 1x，node 名称画在 node 区块几何中心（世界地图与小地图都要）；小地图几何走 Xaero FBO（注入 MinimapElementMapRendererHandler.beforeRender 的 RETURN），屏幕层只画名称并在 FBO 不可用时兜底画几何，两路以「最近 1 秒活跃」门控避免重复绘制；FTB 大地图编辑器里右键战区与右键 node 同义（都编辑其所属 node），选择菜单只留一个取消项，且仅在 node/WARZONE 编辑模式下才拦截 FTB 原有鼠标行为；node 与战区只能成对存在：删除入口只有 node delete（连带删除绑定战区，warzone delete 已删除），阵营只能由 node setfaction 下发（warzone setfaction 已删除），两者不得各自独立变更。世界地图线条为 0.5 逻辑像素亚像素细线（自建 POSITION_COLOR 顶点，因 GuiGraphics.fill 只能画 1 整逻辑像素），顶点坐标全程浮点、不得整数量化（量化会导致直角错位与断口）。用户硬性要求：不得猜测，每一步都必须先读源代码（含 javap 反编译字节码）验证。",
+      "content": "War Project 规则基线（用户定下，勿再询问）：node 用字符串 id 作真实主键；占领始终允许（无战时/和平状态、无城镇层级）；只保留 /warproject 服务端命令（客户端命令已删）；FTB/Architectury/Xaero 均为可选依赖；Xaero 中 node 边界实线、战区边界虚线且虚线长度随缩放，世界地图最小缩放 1x，node 名称画在 node 区块几何中心（大小地图都要）；小地图几何走 Xaero FBO（注入 MinimapElementMapRendererHandler.beforeRender 的 RETURN），屏幕层只画名称并在 FBO 不可用时兜底画几何，两路以「最近 1 秒活跃」门控；FTB 大地图里右键战区＝右键 node（都编辑其所属 node），选择菜单只留一个取消项，且仅在 node/WARZONE 编辑模式下才拦截 FTB 原有鼠标行为；node 与战区只能成对存在：删除只有 node delete（连带删战区），阵营只能由 node setfaction 下发，两者不得各自独立变更。世界地图线条为 0.5 逻辑像素亚像素细线（自建 POSITION_COLOR 顶点；GuiGraphics.fill 只能画 1 整像素），顶点全程浮点、不得量化。用户硬性要求：不得猜测，每一步都必须先读源码（含 javap 反编译）验证。",
       "created_at": "2026-09-12T11:54:29.663Z",
-      "updated_at": "2026-09-19T19:32:56.413Z",
+      "updated_at": "2026-09-21T10:10:31.396Z",
       "target": "memory",
       "importance": "normal"
     },
@@ -51,9 +51,9 @@
       "importance": "normal"
     },
     {
-      "content": "War Project 资源经济（2026-09-20 落地为个人资源）：SavedData war_project_resources 用 players[]={id(scoreboardName),ammo,fuel}，旧 teams 段读档时忽略并记日志；node 产出按「每个在线队员各得全额」（队伍产出 X、在线 N 人各得 X），仅在线结算、离线不累积；每人每种硬上限 999（ResourceData.MAX_AMOUNT 统一 clamp）；消耗/转移全部走个人余额。服务端门面 resource/ResourceApi：playerKnown/stock/playerStocks/set/add/spend/teamRate/snapshotFor/sendSync/pushSyncAll/transfer；transfer 规则=仅 RUNNING、同队、对方在线、余额足额、对方满 999 则整笔拒绝，成功后双方各收聊天回执并刷新 HUD。指令：resource list/player/set/add/take/transfer <player> <ammo|fuel> <amount>，game status 输出 onlinePlayers/trackedPlayers/nodesWithOutput/ammo/fuel。网络协议号 \"6\"：ResourceSyncPacket(running,hasTeam,ammo,fuel,ammoPerMinute,fuelPerMinute,teammates[])、TransferResourcePacket(C→S)、TransferResultPacket(S→C)。",
+      "content": "War Project 资源经济（2026-09-20，个人资源）：SavedData war_project_resources 用 players[]={id(scoreboardName),ammo,fuel}（旧 teams 段读档忽略并记日志）；node 产出「每个在线队员各得全额」（队伍产出 X、在线 N 人各得 X），仅在线结算；每人每种上限 999（ResourceData.MAX_AMOUNT 统一 clamp）；消耗/转移全走个人余额。门面 resource/ResourceApi：playerKnown/stock/playerStocks/set/add/spend/teamRate/snapshotFor/sendSync/pushSyncAll/transfer；transfer＝仅 RUNNING、同队、对方在线、余额足额、对方满 999 整笔拒绝，成功双方各收聊天回执并刷新 HUD。指令 resource list/player/set/add/take/transfer <player> <ammo|fuel> <amount>；game status 输出 onlinePlayers/trackedPlayers/nodesWithOutput/ammo/fuel。协议号 6：ResourceSyncPacket(running,hasTeam,ammo,fuel,ammoPerMinute,fuelPerMinute,teammates[])、TransferResourcePacket(C→S)、TransferResultPacket(S→C)。",
       "created_at": "2026-09-19T03:36:12.062Z",
-      "updated_at": "2026-09-19T17:33:58.297Z",
+      "updated_at": "2026-09-21T10:10:31.410Z",
       "target": "memory",
       "importance": "critical"
     },
@@ -65,9 +65,9 @@
       "importance": "normal"
     },
     {
-      "content": "War Project 资源 HUD/转移面板规格（2026-09-20 最终，取代旧版）：顶部居中黑色胶囊 #000000f0、无外阴影，『图标+存量+ +xx ｜ 同上』；图标用原版 PNG textures/gui/{ammo,fuel}.png 显示 12px，由 Java 原样 base64 内联，禁止预缩放或矢量重绘；岛 CEF 画布 156×18、面板 208×168、字号 9px、文案一律中文；真弧线圆角、居中由渲染方 flex 完成；**聊天栏（ChatScreen）打开时照常显示岛**（它是转移面板的点击入口），**其它任意 GUI 隐藏岛**（只显示转移面板），SBW 炮镜同样隐藏；CEF 必须按物理分辨率渲染：browser_rect=GUI 尺寸 + device_scale_factor=Minecraft.getGuiScale()，禁止『1 GUI 像素 = 1 页面像素』（会被 MC 放大 N 倍而发糊）。",
+      "content": "War Project 顶部 HUD（2026-09-21 定稿）：单文档 `html/top_hud.html`，由 `client/ResourceIslandView` 驱动；显隐＝`running && hasTeam && 非 SBW 炮镜`。条＝纯矩形主体（宽=屏宽×0.68，clamp 240–420、量化 4px，padding 0 12px，`#000000f0`）＋两端固定 14×22 圆角端盖 SVG（宽元素圆角不可靠，端盖才稳）；胶囊＝高 18、圆角 9、padding 0 12（12px PNG 图标 + 存量 + `+xx`）；交界＝两个 9×9 凹角补丁，path 须为四分之一圆盘（`M 0 0 C 0 5 4 9 9 9 L 9 0 Z`，与条/胶囊各整边相连），不是弦月牙（否则露尖角）；星每 vp node 一颗，`viewBox=\"-4 -4 32 32\"`、占领环半径 13.5/11.5（环比星明显大一圈）；`.score{min-width:24px}` 使左右对称。CEF 只画转移面板（表面下移 y=43）。内核只认单 class/单 id/元素选择器（陷阱详文档 `f4af89b7`）。",
       "created_at": "2026-09-19T06:54:30.069Z",
-      "updated_at": "2026-09-19T21:09:07.095Z",
+      "updated_at": "2026-09-21T14:50:19.006Z",
       "target": "memory",
       "importance": "critical"
     },
@@ -79,23 +79,23 @@
       "importance": "normal"
     },
     {
-      "content": "War Project × SBW（Superb Warfare）可选兼容（2026-09-19 用户定调）：玩家处于 SBW 载具第一视角（炮镜）时隐藏资源灵动岛 HUD。判定（无编译期依赖、SBW 缺失时惰性）：Minecraft.player.getVehicle() 类名沿父类链以 \"com.atsuishio.superbwarfare.entity.vehicle\" 开头，且 Minecraft.options.getCameraType().isFirstPerson() 为真（等价于 SBW 的 RenderContext#isFirstPerson()，javap 证据 Options.m_92176_().m_90612_()Z）。代码 client/SuperbWarfareCompat.java，被 client/ResourceHudOverlay 调用。",
+      "content": "War Project × SBW（Superb Warfare）可选兼容（2026-09-19 定调，2026-09-21 扩展）：SBW 载具炮镜（含第三人称按住炮镜键）时隐藏整个顶部 HUD。判定（零编译依赖）：`SuperbWarfareCompat.isVehicleGunSight()` ＝ 玩家坐在类名以 `com.atsuishio.superbwarfare.entity.vehicle` 开头的载具上，且（`options.getCameraType().isFirstPerson()` 为真 **或** 反射读 `com.atsuishio.superbwarfare.event.ClientEventHandler.zoomVehicle` == true；该 public static 字段由 SBW 的 ClickEventHandler 在按住 `HOLD_ZOOM` 时置位，已用 javap 反汇编验证）。",
       "created_at": "2026-09-19T07:36:56.853Z",
-      "updated_at": "2026-09-19T19:32:56.438Z",
+      "updated_at": "2026-09-21T10:10:36.083Z",
       "target": "memory",
       "importance": "normal"
     },
     {
-      "content": "War Project 全局 HTML 渲染内核（2026-09-20 落地，html 包，零依赖、不属于任何模块）：Css / HtmlNode / HtmlDocument（解析 + refreshStyles）/ HtmlLayout / HtmlRenderer / HtmlViewHost；支持 div span b img button input hr、内联 style 与 <style> 的 .class/#id/元素/:hover/:active，以及圆角（逐行 fill 内缩）、阴影、边框、flex(row,column)、margin/padding/gap、align-items、justify-content、opacity、transform(scale,translate)、transition；关键机制：CSS 不烘焙，切 class 后靠 HtmlDocument.refreshStyles() 重求值（HtmlViewHost 用 classRevision 检测），否则 setClass 无效；img 用 11 参数 blit（drawW,drawH,uOffset,vOffset,srcW,srcH,texW,texH）；数字输入复用 vanilla EditBox、外观由内核绘制。灵动岛 client/ResourceIslandView 与转移面板 client/ResourceTransferController 都用它渲染；HTML 取自 assets/war_project/html/*.html，失败回退内置常量。转移交互：聊天栏打开时右键灵动岛 ammo/fuel 图标 → 面板出现在鼠标位置（越界夹回）→ 选本队成员（离线置灰、显示每人 A/F 存量）→ 输入数量（上限 min(自己余额, 999-对方存量)）→ Confirm/Cancel，ESC 或点面板外关闭；面板打开期间面板区域内鼠标/滚轮/按键/字符事件 setCanceled；过渡动画 150-160ms。",
+      "content": "War Project 全局 HTML 渲染内核（html 包，零依赖、不属于任何模块）：Css / HtmlNode / HtmlDocument（解析 + refreshStyles）/ HtmlLayout / HtmlRenderer / HtmlVector / HtmlTextures / HtmlViewHost；支持 div span b img button input hr 与 SVG 子集（svg/path/circle/ellipse/rect/polygon/polyline；fill 每帧读属性 → 改 attributes 即变色，纹理缓存键只含几何）、内联 style 与 <style> 的 .class/#id/元素/:hover/:active、display:none（布局与渲染都跳过）、圆角（SDF AA）、阴影、边框、flex(row,column)、gap、align-items、justify-content、opacity、transform(scale)、transition；**无 keyframes**，动画只能 tick 驱动。关键机制：CSS 不烘焙，切 class 后靠 HtmlDocument.refreshStyles() 重求值（HtmlViewHost 按 classRevision 检测），否则 setClass 无效；img 用 11 参数 blit；数字输入复用 vanilla EditBox。模板取自 assets/war_project/html/*.html（失败回退内置常量）。使用者：灵动岛 client/ResourceIslandView、转移面板 client/ResourceTransferController、VP 战局条 client/VpWarBarView。",
       "created_at": "2026-09-19T17:33:58.315Z",
-      "updated_at": "2026-09-19T19:32:44.047Z",
+      "updated_at": "2026-09-20T12:02:22.793Z",
       "target": "memory",
       "importance": "normal"
     },
     {
-      "content": "War Project 地图边界（2026-09-20 落地，用户定调）：地图区域=单个主世界矩形，语法是 `/warproject map set <fromX> <fromZ> <toX> <toZ>`（**4 个整数区块坐标、空格分隔**，两角顺序任意；旧的 `0,0 9,9` 逗号写法无效），写入 MapData 的 `bounds` 段，`/warproject map info` 只读回显；map set 会把被缩小的主世界原版边界复位到 `WorldBorder.MAX_SIZE`（不再用世界边界当硬边界）。世界里沿边界自绘黄色条纹墙（forcefield 纹理 + 与 `LevelRenderer.renderWorldBorder` 同款渲染状态，顶点取相机相对坐标，UV 0.5/格滚动，仅主世界 `Stage.AFTER_TRANSLUCENT_BLOCKS`）。Xaero 世界地图界外整片红雾 `0x38FF3B30`（POSITION_COLOR 批内最先画），小地图也画 `0x44FF3B30`（随朝向旋转，用矩形 4 角投影 + 逐行扫描求行内区间，屏幕层绘制）。越界执法 MapBoundaryService：每 tick 只判主世界，**创造/旁观模式豁免**，`Config.outOfMapReturnSeconds` 默认 30s 超时 `ServerPlayer.kill()`；准星下方红字倒计时，服务端只在新状态变化时发包（协议号 7，`OutOfMapWarningPacket`，-1 表示清除），客户端本地倒数。",
+      "content": "War Project 地图边界（2026-09-20 定调）：`/warproject map set <fromX> <fromZ> <toX> <toZ>`（4 个整数区块坐标）写 MapData 的 `bounds` 段并随快照下发，`map info` 回显；同时把被缩小的主世界原版边界复位到 `WorldBorder.MAX_SIZE`（世界边界不再是硬边界）。世界内沿边界自绘黄色条纹墙（forcefield 纹理，仅主世界），超出渲染距离的部分不渲染（按 `getEffectiveRenderDistance()*16` 圆-弦裁剪）。Xaero 世界地图界外红雾 `0x38FF3B30`、小地图 `0x44FF3B30`、FTB 大地图同范围（红雾 + 1px 亮红边框 `0xFFFF8B80`，裁剪到面板、画在 node/战区之下）。越界执法 MapBoundaryService：每 tick、只判主世界、创造/旁观豁免，`Config.outOfMapReturnSeconds` 默认 30s 超时 `ServerPlayer.kill()`；准星下方无阴影红字倒计时（须 `drawString(..., false)`），客户端本地倒数。",
       "created_at": "2026-09-19T19:09:17.232Z",
-      "updated_at": "2026-09-19T21:02:11.535Z",
+      "updated_at": "2026-09-21T12:20:10.813Z",
       "target": "memory",
       "importance": "critical"
     },
@@ -107,18 +107,25 @@
       "importance": "normal"
     },
     {
-      "content": "War Project 模块改名（2026-09-20 用户定调）：wargame 模块更名为 nodeLJYS —— 包 com.flowingsun.war_project.nodeLJYS（原 wargame/）；NodeLJYSModule（id()=\"nodeLJYS\"）← WargameModule，NodeLJYSService ← WargameService，NodeOccupationService / CaptureProgressQueryApi 随包迁移；客户端 WargameCapture* 四类 → NodeLJYSCapture*（Client / HudOverlay / HudState / NoticeHudState）；注释「reference mod's WargameCapture*」保留参考模组原名。",
-      "created_at": "2026-09-19T19:32:23.178Z",
-      "updated_at": "2026-09-19T19:32:23.178Z",
-      "target": "memory",
-      "importance": "normal"
-    },
-    {
       "content": "Brigadier 命令参数**只能用 vanilla 类型**（已在 `ArgumentTypeInfos` 注册）；自定义 ArgumentType 会让登录期命令树序列化抛 `Unrecognized argument type` → `Couldn't place player in world`，玩家彻底进不去存档（2026-09-20 事故）。`StringArgumentType.word()` 不含逗号，故 `/warproject map set` 用 4 个整数。写 eula.txt/datapack 必须无 BOM。",
       "created_at": "2026-09-19T20:27:25.953Z",
       "updated_at": "2026-09-19T20:27:25.953Z",
       "target": "memory",
       "importance": "critical"
+    },
+    {
+      "content": "War Project VP node 与 VP 战局（用户定调，2026-09-20/21）：`vp` node 永不产出资源（`node setresource` 拒绝），入口＝FTB `Toggle VP`／右键 `Mark as VP node`／`/warproject node setvp`。战局规则：双方＝**同盟簇**（队伍+传递盟友）；初始分**默认 500（可配置）**；每个被敌方占领的 vp node **每分钟扣对方 30 点（可配置）**；**任一方归零即 game end**。HUD 需在 game start 后渲染：左蓝＝己方／右红＝敌方／中间按 vpnode 数量画五角星（含占领动画），**显隐与灵动岛保持一致**，SBW 载具**第三人称按炮镜键**时同样隐藏。",
+      "created_at": "2026-09-20T07:27:17.290Z",
+      "updated_at": "2026-09-21T10:13:42.011Z",
+      "target": "memory",
+      "importance": "critical"
+    },
+    {
+      "content": "War Project CEF 表面（`CefWebRenderer` SURFACE 176×150 + `CefOsrView.setGuiSize` + `assets/war_project/web/overlay.html`）自 2026-09-21 起只承载转移面板（`drawSurface` 要求 `panelOpen`、`renderIsland` 空实现、表面下移到 y=43 给内核顶部 HUD 让位）；历史上它是「岛+面板」一整张纹理，改尺寸或页面结构会让整个 HUD 消失（2026-09-20 事故）。新 HUD 元素一律放内置 html 内核（`client/ResourceIslandView` + `html/top_hud.html`）。",
+      "created_at": "2026-09-20T12:40:31.976Z",
+      "updated_at": "2026-09-21T10:10:36.068Z",
+      "target": "memory",
+      "importance": "normal"
     }
   ]
 }

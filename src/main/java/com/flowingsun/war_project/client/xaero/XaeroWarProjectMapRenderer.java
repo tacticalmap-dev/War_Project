@@ -42,19 +42,32 @@ public final class XaeroWarProjectMapRenderer {
     }
 
     /**
-     * World-space centre of a set of chunks, used to place a node label on the map.
+     * Centre of the bounding box of a set of chunks, used to place a node label on the map.
+     *
+     * <p>The box centre — not the average of the chunk positions — is what reads as "the middle" of an
+     * irregularly shaped node: on an L-shaped area the average sits well off to one side.
      */
     public static double[] geometricCenter(Iterable<Long> chunks) {
-        double sumX = 0.0D;
-        double sumZ = 0.0D;
-        int count = 0;
+        int minChunkX = Integer.MAX_VALUE;
+        int minChunkZ = Integer.MAX_VALUE;
+        int maxChunkX = Integer.MIN_VALUE;
+        int maxChunkZ = Integer.MIN_VALUE;
+        boolean any = false;
         for (Long key : chunks) {
             ChunkPos pos = new ChunkPos(key);
-            sumX += (pos.x + 0.5D) * 16.0D;
-            sumZ += (pos.z + 0.5D) * 16.0D;
-            count++;
+            minChunkX = Math.min(minChunkX, pos.x);
+            minChunkZ = Math.min(minChunkZ, pos.z);
+            maxChunkX = Math.max(maxChunkX, pos.x);
+            maxChunkZ = Math.max(maxChunkZ, pos.z);
+            any = true;
         }
-        return count == 0 ? null : new double[]{sumX / count, sumZ / count};
+        if (!any) {
+            return null;
+        }
+        // +1 so this is the middle of the covered area rather than the middle of the outermost origins.
+        return new double[]{
+                (minChunkX + maxChunkX + 1) * 16.0D / 2.0D,
+                (minChunkZ + maxChunkZ + 1) * 16.0D / 2.0D};
     }
 
     public static String label(String name, String id, int maxLength) {

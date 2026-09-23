@@ -57,12 +57,21 @@ public final class MapDivideStateApi {
         return MapData.get(server).node(nodeId).map(MapData.Node::chunks).orElse(Set.of());
     }
 
-    public static MapData.SaveResult createNodeWithWarzone(MinecraftServer server, String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb) {
-        MapData.SaveResult result = MapData.get(server).saveNodeWithWarzone(nodeId, nodeName, nodeChunks, warzoneChunks, colorRgb);
+    public static MapData.SaveResult createNodeWithWarzone(MinecraftServer server, String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb, boolean vp) {
+        MapData.SaveResult result = MapData.get(server).saveNodeWithWarzone(nodeId, nodeName, nodeChunks, warzoneChunks, colorRgb, vp);
         if (result.ok()) {
             com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
         }
         return result;
+    }
+
+    /** Flags or clears a node's VP marker and pushes the new snapshot to every client. */
+    public static boolean setNodeVp(MinecraftServer server, String nodeId, boolean vp) {
+        boolean changed = MapData.get(server).setNodeVp(nodeId, vp);
+        if (changed) {
+            com.flowingsun.war_project.net.WarProjectNetwork.broadcastMap(server);
+        }
+        return changed;
     }
 
     public static boolean setNodeFaction(MinecraftServer server, String nodeId, String factionId) {

@@ -7,7 +7,9 @@ import net.minecraftforge.common.MinecraftForge;
 
 public final class NodeLJYSModule implements WarProjectModule {
     private NodeLJYSService service;
+    private VpWarService vpWarService;
     private GameStateService.Listener gamePhaseListener;
+    private GameStateService.Listener vpWarPhaseListener;
 
     @Override
     public String id() {
@@ -20,6 +22,11 @@ public final class NodeLJYSModule implements WarProjectModule {
         MinecraftForge.EVENT_BUS.register(service);
         gamePhaseListener = service::onGamePhaseChanged;
         GameStateService.active().addListener(gamePhaseListener);
+
+        vpWarService = VpWarService.active();
+        MinecraftForge.EVENT_BUS.register(vpWarService);
+        vpWarPhaseListener = vpWarService::onGamePhaseChanged;
+        GameStateService.active().addListener(vpWarPhaseListener);
     }
 
     @Override
@@ -33,5 +40,15 @@ public final class NodeLJYSModule implements WarProjectModule {
             service = null;
         }
         NodeLJYSService.clearActive();
+
+        if (vpWarPhaseListener != null) {
+            GameStateService.active().removeListener(vpWarPhaseListener);
+            vpWarPhaseListener = null;
+        }
+        if (vpWarService != null) {
+            MinecraftForge.EVENT_BUS.unregister(vpWarService);
+            vpWarService = null;
+        }
+        VpWarService.clearActive();
     }
 }

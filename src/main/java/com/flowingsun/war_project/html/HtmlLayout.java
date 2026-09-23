@@ -59,6 +59,10 @@ public final class HtmlLayout {
                 childWidth = Math.min(childWidth, childCss.maxWidth);
             }
             int childHeight = childCss.height >= 0 ? childCss.height : measureHeight(child, font);
+            // Absolutely positioned children are laid out (so they get a size and lay out their own
+            // children) but must not consume space in the flow: otherwise an absolutely positioned
+            // overlay pushes its siblings down by its own height.
+            boolean absolute = childCss.position.equals("absolute");
             int cx;
             int cy;
             if (row) {
@@ -67,15 +71,19 @@ public final class HtmlLayout {
                 if (css.alignItems.equals("center")) {
                     cy = node.contentY + (node.contentHeight - childHeight) / 2;
                 }
-                rowCursor = cx + childWidth + childCss.marginRight + css.gap;
-                maxCross = Math.max(maxCross, childHeight + childCss.marginTop + childCss.marginBottom);
+                if (!absolute) {
+                    rowCursor = cx + childWidth + childCss.marginRight + css.gap;
+                    maxCross = Math.max(maxCross, childHeight + childCss.marginTop + childCss.marginBottom);
+                }
             } else {
                 cx = node.contentX + childCss.marginLeft;
                 cy = cursor + childCss.marginTop;
                 if (css.alignItems.equals("center")) {
                     cx = node.contentX + (node.contentWidth - childWidth) / 2;
                 }
-                cursor = cy + childHeight + childCss.marginBottom + css.gap;
+                if (!absolute) {
+                    cursor = cy + childHeight + childCss.marginBottom + css.gap;
+                }
             }
             arrange(child, font, cx, cy, childWidth);
         }
@@ -83,7 +91,14 @@ public final class HtmlLayout {
             int used = row ? rowCursor - node.contentX - css.gap : cursor - node.contentY - css.gap;
             int free = row ? node.contentWidth - used : node.contentHeight - used;
             if (free > 0) {
-                shift(node, row ? free / 2 : 0, row ? 0 : free / 2);
+                // Centre the line by moving the children, never the box itself: shifting the box would
+                // drag it out of whatever centred it inside its own parent, which showed up as the
+                // whole bar sitting off centre with all its content pushed to one side.
+                int dx = row ? free / 2 : 0;
+                int dy = row ? 0 : free / 2;
+                for (HtmlNode child : node.children) {
+                    shift(child, dx, dy);
+                }
             }
         }
         for (HtmlNode child : node.children) {

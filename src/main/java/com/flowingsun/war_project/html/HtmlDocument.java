@@ -161,7 +161,11 @@ public final class HtmlDocument {
         }
     }
 
-    private void collectRules(String cssText) {
+    private void collectRules(String rawCssText) {
+        // Comments are stripped up front: the selector is everything between the previous closing
+        // brace and the next opening brace, so a /* ... */ left in place would be glued onto the
+        // selector that follows it and that whole rule would silently never match.
+        String cssText = stripComments(rawCssText);
         int index = 0;
         while (index < cssText.length()) {
             int open = cssText.indexOf('{', index);
@@ -216,6 +220,25 @@ public final class HtmlDocument {
                 applyDeclarations(target, rule.body());
             }
         }
+    }
+
+    private static String stripComments(String css) {
+        StringBuilder out = new StringBuilder(css.length());
+        int index = 0;
+        while (index < css.length()) {
+            int start = css.indexOf("/*", index);
+            if (start < 0) {
+                out.append(css, index, css.length());
+                break;
+            }
+            out.append(css, index, start);
+            int end = css.indexOf("*/", start + 2);
+            if (end < 0) {
+                break;
+            }
+            index = end + 2;
+        }
+        return out.toString();
     }
 
     private static boolean matches(HtmlNode node, String base) {

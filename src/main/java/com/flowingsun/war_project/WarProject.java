@@ -88,6 +88,7 @@ public class WarProject {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
             WarProjectNetwork.sendMap(player);
             WarProjectNetwork.sendTeams(player);
+            WarProjectNetwork.sendVpWar(player);
             com.flowingsun.war_project.resource.ResourceApi.sendSync(player);
         }
     }

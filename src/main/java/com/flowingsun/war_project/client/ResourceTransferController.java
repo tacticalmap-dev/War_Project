@@ -160,19 +160,20 @@ public final class ResourceTransferController {
             return;
         }
         WebRendererService.tick();
-        if (WebRendererService.active() != null) {
-            // Chromium drives its own animation, message loop and input.
-            return;
-        }
         Minecraft minecraft = Minecraft.getInstance();
         long now = System.nanoTime();
         float deltaMs = lastNanos == 0L ? 16.0F : Math.min(120.0F, (now - lastNanos) / 1_000_000.0F);
         lastNanos = now;
+        // The fused top HUD is animated by the built in kernel even while Chromium owns the panel.
+        ResourceIslandView.tick(deltaMs);
+        if (WebRendererService.active() != null) {
+            // Chromium drives its own animation, message loop and input.
+            return;
+        }
         if (minecraft.player == null) {
             close();
             return;
         }
-        ResourceIslandView.tick(deltaMs);
         host().tick(deltaMs);
         if (closeAt > 0L && System.currentTimeMillis() >= closeAt) {
             close();
@@ -194,6 +195,7 @@ public final class ResourceTransferController {
         WebRendererService.onDisconnect();
         close();
         ResourceIslandView.reset();
+        VpWarClientState.reset();
     }
 
     @SubscribeEvent
@@ -207,20 +209,17 @@ public final class ResourceTransferController {
         // The island stays on screen for the chat screen only: that is where it is clicked to open the
         // transfer panel. Every other screen (inventory, ESC, JEI, ...) hides it.
         boolean chatOpen = minecraft.screen instanceof ChatScreen;
+        // The fused top HUD is always drawn by the built in kernel, whatever backend owns the panel.
+        if (chatOpen) {
+            ResourceIslandView.render(graphics, screenWidth);
+        }
         WebRenderer web = WebRendererService.active();
         if (web != null) {
-            if (chatOpen) {
-                web.renderIsland(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight());
-            }
             if (web.isPanelOpen()) {
                 web.renderPanel(graphics, screenWidth, minecraft.getWindow().getGuiScaledHeight(),
                         (int) event.getMouseX(), (int) event.getMouseY());
             }
             return;
-        }
-        // Built in renderer: same rule.
-        if (chatOpen) {
-            ResourceIslandView.render(graphics, screenWidth);
         }
         if (!open) {
             return;
@@ -254,6 +253,25 @@ public final class ResourceTransferController {
         }
         double mouseX = event.getMouseX();
         double mouseY = event.getMouseY();
+        // The island is drawn by the built in kernel now, so its icons are hit tested here and the
+        // result is handed to whichever backend owns the transfer panel.
+        if (event.getButton() == 0) {
+            ResourceKind icon = ResourceIslandView.iconAt(mouseX, mouseY);
+            if (icon != null) {
+                WebRenderer web = WebRendererService.active();
+                if (web != null) {
+                    // Clicking the icon while the panel is already open is swallowed: reopening it would
+                    // replay the growth animation, reset the typed amount and flash the previous frame.
+                    if (!web.isPanelOpen()) {
+                        web.openPanel(icon, (int) mouseX, (int) mouseY);
+                    }
+                } else if (!open) {
+                    openPanel(icon, mouseX, mouseY);
+                }
+                event.setCanceled(true);
+                return;
+            }
+        }
         WebRenderer web = WebRendererService.active();
         if (web != null) {
             if (web.mousePressed(mouseX, mouseY, event.getButton())) {

@@ -71,6 +71,7 @@ public final class WarProjectCommands {
                 .then(nodeCommands())
                 .then(warzoneCommands())
                 .then(progressCommands())
+                .then(vpWarCommands())
                 .then(gameCommands())
                 .then(recoveryCommands())
                 .then(resourceCommands())
@@ -118,6 +119,12 @@ public final class WarProjectCommands {
                                 .then(Commands.argument("ammoPerMinute", DoubleArgumentType.doubleArg(0.0D))
                                         .then(Commands.argument("fuelPerMinute", DoubleArgumentType.doubleArg(0.0D))
                                                 .executes(WarProjectCommands::nodeSetResource)))))
+                .then(Commands.literal("setvp")
+                        .then(Commands.argument("nodeId", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
+                                .then(Commands.argument("vp", StringArgumentType.word())
+                                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(java.util.List.of("true", "false"), builder))
+                                        .executes(WarProjectCommands::nodeSetVp))))
                 .then(Commands.literal("delete")
                         .then(Commands.argument("nodeId", StringArgumentType.word())
                                 .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
@@ -145,6 +152,39 @@ public final class WarProjectCommands {
                         .then(Commands.argument("nodeId", StringArgumentType.word())
                                 .suggests((context, builder) -> SharedSuggestionProvider.suggest(MapDivideStateApi.getAllNodeIds(server(context)), builder))
                                 .executes(WarProjectCommands::progressNode)));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> vpWarCommands() {
+        return Commands.literal("vpwar")
+                .then(Commands.literal("status").executes(WarProjectCommands::vpWarStatus));
+    }
+
+    /** Read only view of the VP war: every side's score and every VP node's owner and capture progress. */
+    private static int vpWarStatus(CommandContext<CommandSourceStack> context) {
+        MinecraftServer server = server(context);
+        com.flowingsun.war_project.nodeLJYS.VpWarState state =
+                com.flowingsun.war_project.nodeLJYS.VpWarService.active().state(server);
+        context.getSource().sendSuccess(() -> Component.literal("VP war: running=" + state.running()
+                + " start=" + number(state.maxScore()) + " sides=" + state.sides().size()), false);
+        for (com.flowingsun.war_project.nodeLJYS.VpWarState.Side side : state.sides()) {
+            context.getSource().sendSuccess(() -> Component.literal("  side " + side.name()
+                    + " score=" + number(side.score())), false);
+        }
+        if (state.nodes().isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.literal("  no VP nodes"), false);
+        }
+        for (com.flowingsun.war_project.nodeLJYS.VpWarState.NodeState node : state.nodes()) {
+            context.getSource().sendSuccess(() -> Component.literal("  vp " + node.nodeId()
+                    + " owner=" + node.ownerFaction()
+                    + " side=" + (node.ownerSideKey().isEmpty() ? "-" : node.ownerSideKey())
+                    + " attacker=" + (node.attackerSideKey().isEmpty() ? "-" : node.attackerSideKey())
+                    + " capture=" + number(node.capturePercent() * 100.0D) + "%"), false);
+        }
+        return state.sides().size();
+    }
+
+    private static String number(double value) {
+        return String.format(java.util.Locale.ROOT, "%.1f", value);
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> gameCommands() {
@@ -320,8 +360,14 @@ public final class WarProjectCommands {
     }
 
     private static int nodeList(CommandContext<CommandSourceStack> context) {
-        Set<String> ids = MapDivideStateApi.getAllNodeIds(server(context));
-        context.getSource().sendSuccess(() -> Component.literal(ids.isEmpty() ? "No nodes." : "Nodes: " + String.join(", ", ids)), false);
+        MinecraftServer server = server(context);
+        Set<String> ids = MapDivideStateApi.getAllNodeIds(server);
+        // A trailing "*" marks the VP objectives, so the list still fits on one line.
+        java.util.List<String> rendered = new ArrayList<>();
+        for (String id : ids) {
+            rendered.add(MapData.get(server).isVpNode(id) ? id + "*" : id);
+        }
+        context.getSource().sendSuccess(() -> Component.literal(ids.isEmpty() ? "No nodes." : "Nodes (* = VP): " + String.join(", ", rendered)), false);
         return ids.size();
     }
 
@@ -576,11 +622,44 @@ public final class WarProjectCommands {
         String nodeId = StringArgumentType.getString(context, "nodeId");
         double ammoPerMinute = DoubleArgumentType.getDouble(context, "ammoPerMinute");
         double fuelPerMinute = DoubleArgumentType.getDouble(context, "fuelPerMinute");
-        if (!MapDivideStateApi.setNodeResourceOutputs(server(context), nodeId, ammoPerMinute, fuelPerMinute)) {
+        MinecraftServer server = server(context);
+        if (MapData.get(server).node(nodeId).isEmpty()) {
             return fail(context, "Node not found: " + nodeId);
+        }
+        if (MapData.get(server).isVpNode(nodeId)) {
+            return fail(context, "Node " + nodeId + " is a VP node and never produces resources; clear its VP flag first"
+                    + " (/warproject node setvp " + nodeId + " false).");
+        }
+        if (!MapDivideStateApi.setNodeResourceOutputs(server, nodeId, ammoPerMinute, fuelPerMinute)) {
+            return fail(context, "Unable to set resource output for node: " + nodeId);
         }
         success(context, "Node resource output set: " + nodeId
                 + " -> ammo=" + formatAmount(ammoPerMinute) + "/60s fuel=" + formatAmount(fuelPerMinute) + "/60s");
+        return 1;
+    }
+
+    /**
+     * Flags or clears the VP marker. Marking also clears the node's output, because a VP node never
+     * produces anything; clearing the flag does not give the output back, it has to be set again on purpose.
+     */
+    private static int nodeSetVp(CommandContext<CommandSourceStack> context) {
+        String nodeId = StringArgumentType.getString(context, "nodeId");
+        String raw = StringArgumentType.getString(context, "vp");
+        if (!"true".equalsIgnoreCase(raw) && !"false".equalsIgnoreCase(raw)) {
+            return fail(context, "Expected true or false, got: " + raw);
+        }
+        boolean vp = Boolean.parseBoolean(raw.toLowerCase(java.util.Locale.ROOT));
+        MinecraftServer server = server(context);
+        if (MapData.get(server).node(nodeId).isEmpty()) {
+            return fail(context, "Node not found: " + nodeId);
+        }
+        if (!MapDivideStateApi.setNodeVp(server, nodeId, vp)) {
+            success(context, "VP marker already " + (vp ? "set" : "clear") + " for node: " + nodeId);
+            return 1;
+        }
+        success(context, vp
+                ? "VP marker set (resource output cleared): " + nodeId
+                : "VP marker cleared (set its output again if it should produce): " + nodeId);
         return 1;
     }
 
@@ -779,7 +858,8 @@ public final class WarProjectCommands {
                 + " faction=" + tag.getString("faction_id")
                 + " chunks=" + tag.getList("chunks", Tag.TAG_COMPOUND).size()
                 + " ammoPerMinute=" + formatAmount(tag.getDouble("ammo_per_minute"))
-                + " fuelPerMinute=" + formatAmount(tag.getDouble("fuel_per_minute"));
+                + " fuelPerMinute=" + formatAmount(tag.getDouble("fuel_per_minute"))
+                + " vp=" + tag.getBoolean("vp");
     }
 
     private static String formatWarzone(CompoundTag tag) {

@@ -1,0 +1,4 @@
+[0922/120431.500:WARNING:chrome_browser_cloud_management_controller.cc(88)] Could not create policy manager as CBCM is not enabled.
+[0922/120510.080:WARNING:chrome_browser_cloud_management_controller.cc(88)] Could not create policy manager as CBCM is not enabled.
+[0922/120708.911:ERROR:command_buffer_proxy_impl.cc(320)] GPU state invalid after WaitForGetOffsetInRange.
+[0922/120708.912:ERROR:command_buffer_proxy_impl.cc(128)] ContextResult::kTransientFailure: Failed to send GpuControl.CreateCommandBuffer.

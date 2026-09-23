@@ -12,6 +12,8 @@ import com.flowingsun.war_project.team.TeamData;
 import com.flowingsun.war_project.nodeLJYS.CaptureProgressQueryApi;
 import com.flowingsun.war_project.nodeLJYS.NodeOccupationService;
 import com.flowingsun.war_project.nodeLJYS.NodeLJYSService;
+import com.flowingsun.war_project.nodeLJYS.VpWarService;
+import com.flowingsun.war_project.nodeLJYS.VpWarState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -32,7 +34,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 public final class WarProjectNetwork {
-    private static final String PROTOCOL = "7";
+    private static final String PROTOCOL = "9";
     private static int packetId;
     private static SimpleChannel channel;
 
@@ -89,6 +91,11 @@ public final class WarProjectNetwork {
                 .decoder(SetNodeResourcePacket::decode)
                 .consumerMainThread(SetNodeResourcePacket::handle)
                 .add();
+        channel.messageBuilder(SetNodeVpPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SetNodeVpPacket::encode)
+                .decoder(SetNodeVpPacket::decode)
+                .consumerMainThread(SetNodeVpPacket::handle)
+                .add();
         channel.messageBuilder(TransferResourcePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
                 .encoder(TransferResourcePacket::encode)
                 .decoder(TransferResourcePacket::decode)
@@ -108,6 +115,11 @@ public final class WarProjectNetwork {
                 .encoder(OutOfMapWarningPacket::encode)
                 .decoder(OutOfMapWarningPacket::decode)
                 .consumerMainThread(OutOfMapWarningPacket::handle)
+                .add();
+        channel.messageBuilder(VpWarStatePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(VpWarStatePacket::encode)
+                .decoder(VpWarStatePacket::decode)
+                .consumerMainThread(VpWarStatePacket::handle)
                 .add();
     }
 
@@ -159,9 +171,15 @@ public final class WarProjectNetwork {
         }
     }
 
-    public static void sendCreateNodeWarzone(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb) {
+    public static void sendCreateNodeWarzone(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb, boolean vp) {
         if (channel != null) {
-            channel.sendToServer(new CreateNodeWarzonePacket(nodeId, nodeName, nodeChunks, warzoneChunks, colorRgb));
+            channel.sendToServer(new CreateNodeWarzonePacket(nodeId, nodeName, nodeChunks, warzoneChunks, colorRgb, vp));
+        }
+    }
+
+    public static void sendSetNodeVp(String nodeId, boolean vp) {
+        if (channel != null) {
+            channel.sendToServer(new SetNodeVpPacket(nodeId, vp));
         }
     }
 
@@ -208,6 +226,21 @@ public final class WarProjectNetwork {
     public static void sendOutOfMapWarning(ServerPlayer player, int remainingTicks) {
         if (channel != null) {
             channel.send(PacketDistributor.PLAYER.with(() -> player), new OutOfMapWarningPacket(remainingTicks));
+        }
+    }
+
+    /** The whole VP war view for one player (sent on login, so a fresh client shows the bar at once). */
+    public static void sendVpWar(ServerPlayer player) {
+        if (channel != null && player != null && player.getServer() != null) {
+            channel.send(PacketDistributor.PLAYER.with(() -> player),
+                    new VpWarStatePacket(VpWarService.active().state(player.getServer())));
+        }
+    }
+
+    /** The whole VP war view for everyone; the war service only calls this when it actually changed. */
+    public static void broadcastVpWar(MinecraftServer server) {
+        if (channel != null && server != null) {
+            channel.send(PacketDistributor.ALL.noArg(), new VpWarStatePacket(VpWarService.active().state(server)));
         }
     }
 
@@ -522,17 +555,18 @@ public final class WarProjectNetwork {
         }
     }
 
-    public record CreateNodeWarzonePacket(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb) {
+    public record CreateNodeWarzonePacket(String nodeId, String nodeName, Set<Long> nodeChunks, Set<Long> warzoneChunks, int colorRgb, boolean vp) {
         static void encode(CreateNodeWarzonePacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
             buffer.writeUtf(packet.nodeId, 64);
             buffer.writeUtf(packet.nodeName, 64);
             writeLongSet(buffer, packet.nodeChunks);
             writeLongSet(buffer, packet.warzoneChunks);
             buffer.writeInt(packet.colorRgb);
+            buffer.writeBoolean(packet.vp);
         }
 
         static CreateNodeWarzonePacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
-            return new CreateNodeWarzonePacket(buffer.readUtf(64), buffer.readUtf(64), readLongSet(buffer), readLongSet(buffer), buffer.readInt());
+            return new CreateNodeWarzonePacket(buffer.readUtf(64), buffer.readUtf(64), readLongSet(buffer), readLongSet(buffer), buffer.readInt(), buffer.readBoolean());
         }
 
         static void handle(CreateNodeWarzonePacket packet, Supplier<NetworkEvent.Context> context) {
@@ -546,11 +580,42 @@ public final class WarProjectNetwork {
                     return;
                 }
                 MapData.SaveResult result = MapDivideStateApi.createNodeWithWarzone(sender.getServer(), packet.nodeId, packet.nodeName,
-                        packet.nodeChunks, packet.warzoneChunks, packet.colorRgb);
+                        packet.nodeChunks, packet.warzoneChunks, packet.colorRgb, packet.vp);
                 if (result.ok()) {
-                    sender.sendSystemMessage(Component.literal("Created node and warzone: " + packet.nodeId));
+                    sender.sendSystemMessage(Component.literal("Created " + (packet.vp ? "VP node" : "node") + " and warzone: " + packet.nodeId));
                 } else {
                     sender.sendSystemMessage(Component.literal("Unable to create node: " + result.message()));
+                }
+            });
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    /** C→S: flags or clears a node's VP marker (operator only, like every other map edit). */
+    public record SetNodeVpPacket(String nodeId, boolean vp) {
+        static void encode(SetNodeVpPacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            buffer.writeUtf(packet.nodeId, 64);
+            buffer.writeBoolean(packet.vp);
+        }
+
+        static SetNodeVpPacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            return new SetNodeVpPacket(buffer.readUtf(64), buffer.readBoolean());
+        }
+
+        static void handle(SetNodeVpPacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> {
+                ServerPlayer sender = context.get().getSender();
+                if (sender == null) {
+                    return;
+                }
+                if (!sender.hasPermissions(2)) {
+                    sender.sendSystemMessage(Component.literal("War Project map editing requires operator permission."));
+                    return;
+                }
+                if (MapDivideStateApi.setNodeVp(sender.getServer(), packet.nodeId, packet.vp)) {
+                    sender.sendSystemMessage(Component.literal((packet.vp ? "Marked as VP node: " : "Cleared VP marker: ") + packet.nodeId));
+                } else {
+                    sender.sendSystemMessage(Component.literal("No VP change for node: " + packet.nodeId));
                 }
             });
             context.get().setPacketHandled(true);
@@ -662,6 +727,73 @@ public final class WarProjectNetwork {
                     }
                 }
             });
+            context.get().setPacketHandled(true);
+        }
+    }
+
+    /**
+     * S→C: the complete VP war view (every side's war score plus every VP node with its owner and
+     * capture progress). The client mirrors it for the progress bar HUD.
+     */
+    public record VpWarStatePacket(VpWarState state) {
+        /** Sane upper bounds so a malformed payload cannot allocate unbounded lists. */
+        private static final int MAX_SIDES = 64;
+        private static final int MAX_TEAMS_PER_SIDE = 64;
+        private static final int MAX_NODES = 4096;
+
+        static void encode(VpWarStatePacket packet, net.minecraft.network.FriendlyByteBuf buffer) {
+            VpWarState state = packet.state;
+            buffer.writeBoolean(state.running());
+            buffer.writeDouble(state.maxScore());
+            buffer.writeVarInt(state.sides().size());
+            for (VpWarState.Side side : state.sides()) {
+                buffer.writeUtf(side.key(), 256);
+                buffer.writeUtf(side.name(), 256);
+                buffer.writeDouble(side.score());
+                buffer.writeVarInt(side.teamIds().size());
+                for (String teamId : side.teamIds()) {
+                    buffer.writeUtf(teamId, 64);
+                }
+            }
+            buffer.writeVarInt(state.nodes().size());
+            for (VpWarState.NodeState node : state.nodes()) {
+                buffer.writeUtf(node.nodeId(), 64);
+                buffer.writeUtf(node.name(), 128);
+                buffer.writeUtf(node.ownerFaction(), 64);
+                buffer.writeUtf(node.ownerSideKey(), 256);
+                buffer.writeUtf(node.attackerSideKey(), 256);
+                buffer.writeDouble(node.capturePercent());
+            }
+        }
+
+        static VpWarStatePacket decode(net.minecraft.network.FriendlyByteBuf buffer) {
+            boolean running = buffer.readBoolean();
+            double maxScore = buffer.readDouble();
+            int sideCount = Math.min(MAX_SIDES, buffer.readVarInt());
+            List<VpWarState.Side> sides = new ArrayList<>(sideCount);
+            for (int i = 0; i < sideCount; i++) {
+                String key = buffer.readUtf(256);
+                String name = buffer.readUtf(256);
+                double score = buffer.readDouble();
+                int teamCount = Math.min(MAX_TEAMS_PER_SIDE, buffer.readVarInt());
+                List<String> teamIds = new ArrayList<>(teamCount);
+                for (int team = 0; team < teamCount; team++) {
+                    teamIds.add(buffer.readUtf(64));
+                }
+                sides.add(new VpWarState.Side(key, List.copyOf(teamIds), name, score));
+            }
+            int nodeCount = Math.min(MAX_NODES, buffer.readVarInt());
+            List<VpWarState.NodeState> nodes = new ArrayList<>(nodeCount);
+            for (int i = 0; i < nodeCount; i++) {
+                nodes.add(new VpWarState.NodeState(buffer.readUtf(64), buffer.readUtf(128), buffer.readUtf(64),
+                        buffer.readUtf(256), buffer.readUtf(256), buffer.readDouble()));
+            }
+            return new VpWarStatePacket(new VpWarState(running, maxScore, List.copyOf(sides), List.copyOf(nodes)));
+        }
+
+        static void handle(VpWarStatePacket packet, Supplier<NetworkEvent.Context> context) {
+            context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                    () -> () -> com.flowingsun.war_project.client.VpWarClientState.replace(packet.state())));
             context.get().setPacketHandled(true);
         }
     }
